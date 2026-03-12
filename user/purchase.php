@@ -171,55 +171,257 @@ if ($user['account_type'] == 'adult') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Purchase Tickets - CinemaTicket</title>
     <link rel="stylesheet" href="../assets/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --black: #0a0a0a;
+            --deep-gray: #1a1a1a;
+            --medium-gray: #2a2a2a;
+            --light-gray: #333333;
+            --red: #e50914;
+            --red-dark: #b2070f;
+            --red-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #b3b3b3;
+            --glass-bg: rgba(26, 26, 26, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.05);
+            --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: var(--black);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-weight: 400;
+            line-height: 1.6;
+            min-height: 100vh;
+            position: relative;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 20% 50%, rgba(229, 9, 20, 0.03) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, rgba(229, 9, 20, 0.03) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        /* Navigation */
+        .navbar {
+            background: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 30px;
+        }
+        
+        .logo {
+            color: var(--red);
+            font-size: 1.8rem;
+            font-weight: 800;
+            font-family: 'Montserrat', sans-serif;
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            position: relative;
+            transition: all 0.3s;
+        }
+        
+        .logo:hover {
+            text-shadow: var(--red-glow);
+        }
+        
+        .logo::before {
+            content: "🎬";
+            margin-right: 10px;
+            font-size: 1.5rem;
+            filter: drop-shadow(0 0 5px var(--red));
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 25px;
+            align-items: center;
+        }
+        
+        .nav-links a {
+            color: var(--text-primary);
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: all 0.3s;
+            font-weight: 500;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+        }
+        
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 2px;
+            background: var(--red);
+            transition: width 0.3s;
+        }
+        
+        .nav-links a:hover {
+            color: var(--red);
+        }
+        
+        .nav-links a:hover::after {
+            width: 60%;
+        }
+        
+        .nav-links a.active {
+            color: var(--red);
+        }
+        
+        .nav-links a.active::after {
+            width: 60%;
+        }
+        
+        /* Main Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px;
+        }
+        
         .purchase-container {
             max-width: 1200px;
             margin: 0 auto;
         }
         
+        /* Movie Summary */
         .movie-summary {
-            background: #1a1a1a;
-            border: 2px solid #00ffff;
-            border-radius: 8px;
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 24px;
             padding: 25px;
             margin-bottom: 30px;
             display: flex;
             gap: 25px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .movie-summary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            animation: slideBorder 3s infinite;
+        }
+        
+        @keyframes slideBorder {
+            0% { transform: translateX(-100%); }
+            50% { transform: translateX(100%); }
+            100% { transform: translateX(100%); }
         }
         
         .summary-poster {
             width: 120px;
             height: 170px;
             object-fit: cover;
-            border: 2px solid #00ffff;
-            border-radius: 8px;
+            border: 2px solid rgba(229, 9, 20, 0.3);
+            border-radius: 12px;
+            transition: all 0.3s;
+        }
+        
+        .summary-poster:hover {
+            border-color: var(--red);
+            transform: scale(1.05);
         }
         
         .summary-details h1 {
-            color: #00ffff;
+            color: var(--red);
             font-size: 2rem;
             margin-bottom: 15px;
+            font-family: 'Montserrat', sans-serif;
         }
         
         .meta-info {
             display: flex;
             gap: 20px;
-            color: #888;
+            color: var(--text-secondary);
             margin-bottom: 15px;
+            flex-wrap: wrap;
         }
         
         .rating-badge {
             padding: 3px 10px;
-            border-radius: 4px;
-            font-weight: bold;
+            border-radius: 30px;
+            font-weight: 600;
+            font-size: 0.9rem;
         }
         
-        .rating-G { background: #44ff44; color: #000; }
-        .rating-PG { background: #ffff44; color: #000; }
-        .rating-PG-13 { background: #ff8844; color: #000; }
-        .rating-R { background: #ff4444; color: #fff; }
+        .rating-G {
+            background: rgba(68, 255, 68, 0.15);
+            border: 1px solid #44ff44;
+            color: #44ff44;
+        }
         
-        <?php if ($ticket_type == 'online'): ?>
+        .rating-PG {
+            background: rgba(255, 255, 68, 0.15);
+            border: 1px solid #ffff44;
+            color: #ffff44;
+        }
+        
+        .rating-PG-13 {
+            background: rgba(255, 136, 68, 0.15);
+            border: 1px solid #ff8844;
+            color: #ff8844;
+        }
+        
+        .rating-R {
+            background: rgba(229, 9, 20, 0.15);
+            border: 1px solid var(--red);
+            color: var(--red);
+        }
+        
+        .location-info {
+            color: var(--text-secondary);
+            line-height: 1.8;
+        }
+        
+        .location-info strong {
+            color: var(--red);
+        }
+        
+        /* Online Schedule */
         .schedule-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -228,34 +430,57 @@ if ($user['account_type'] == 'adult') {
         }
         
         .schedule-card {
-            background: #1a1a1a;
-            border: 2px solid #00ffff;
-            border-radius: 8px;
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.1);
+            border-radius: 16px;
             padding: 20px;
             cursor: pointer;
             transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .schedule-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            transform: translateX(-100%);
+            animation: slideBorder 3s infinite;
         }
         
         .schedule-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(0, 255, 255, 0.3);
+            transform: translateY(-5px);
+            border-color: rgba(229, 9, 20, 0.3);
+            box-shadow: 0 20px 40px rgba(229, 9, 20, 0.15);
         }
         
         .schedule-card.selected {
-            background: rgba(0, 255, 255, 0.1);
-            border-width: 3px;
+            background: rgba(229, 9, 20, 0.15);
+            border: 2px solid var(--red);
         }
         
         .schedule-time {
             font-size: 1.3rem;
-            color: #00ffff;
-            font-weight: bold;
+            color: var(--red);
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        
+        .schedule-date {
+            color: var(--text-secondary);
             margin-bottom: 10px;
         }
         
         .availability {
             color: #44ff44;
             margin: 10px 0;
+            font-weight: 600;
         }
         
         .availability.warning {
@@ -264,26 +489,69 @@ if ($user['account_type'] == 'adult') {
         
         .schedule-price {
             font-size: 1.2rem;
-            color: #fff;
+            color: var(--red);
+            font-weight: 700;
             margin: 15px 0;
         }
-        <?php else: ?>
+        
+        /* Online Benefits */
+        .online-benefits {
+            background: rgba(229, 9, 20, 0.05);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 16px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .online-benefits h3 {
+            color: var(--red);
+            margin-bottom: 15px;
+        }
+        
+        .online-benefits ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .online-benefits li {
+            color: var(--text-secondary);
+            margin: 10px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+        
+        .online-benefits li:before {
+            content: "✓";
+            color: var(--red);
+            position: absolute;
+            left: 0;
+            font-weight: 700;
+        }
+        
+        /* Seat Selection */
         .seat-selection {
-            background: #1a1a1a;
-            border: 2px solid #00ffff;
-            border-radius: 8px;
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 24px;
             padding: 30px;
             margin: 30px 0;
         }
         
+        .seat-selection h2 {
+            color: var(--red);
+            margin-bottom: 20px;
+        }
+        
         .screen {
-            background: linear-gradient(90deg, transparent, #00ffff, transparent);
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
             height: 5px;
             width: 80%;
             margin: 0 auto 50px;
             text-align: center;
             padding-top: 15px;
-            color: #888;
+            color: var(--text-secondary);
         }
         
         .seat-map {
@@ -296,45 +564,95 @@ if ($user['account_type'] == 'adult') {
         
         .seat {
             aspect-ratio: 1;
-            border: 2px solid #333;
-            border-radius: 4px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             font-size: 11px;
+            font-weight: 600;
             transition: all 0.3s;
+            color: var(--text-secondary);
         }
         
         .seat.available:hover {
-            border-color: #00ffff;
-            color: #00ffff;
+            border-color: var(--red);
+            color: var(--red);
             transform: scale(1.1);
+            box-shadow: 0 0 20px rgba(229, 9, 20, 0.3);
         }
         
         .seat.selected {
-            background: #00ffff;
-            border-color: #00ffff;
-            color: #000;
+            background: var(--red);
+            border-color: var(--red);
+            color: #fff;
+            transform: scale(1.05);
         }
         
         .seat.booked {
-            background: #333;
-            border-color: #444;
-            color: #666;
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.2);
             cursor: not-allowed;
+            text-decoration: line-through;
         }
         
-        .seat.aisle {
-            border-color: #00ffff;
+        /* Legend */
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin: 20px 0 30px;
         }
-        <?php endif; ?>
         
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+        }
+        
+        .legend-box {
+            width: 20px;
+            height: 20px;
+            border: 2px solid;
+            border-radius: 4px;
+        }
+        
+        .legend-box.available { border-color: rgba(255, 255, 255, 0.3); }
+        .legend-box.selected { background: var(--red); border-color: var(--red); }
+        .legend-box.booked { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.1); }
+        
+        /* Selected Info */
+        .selected-info {
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 40px;
+            color: var(--red);
+            text-align: center;
+            font-weight: 600;
+        }
+        
+        .selected-info span {
+            color: #fff;
+        }
+        
+        /* Purchase Form */
         .purchase-form {
-            background: #1a1a1a;
-            border: 2px solid #00ffff;
-            border-radius: 8px;
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 24px;
             padding: 30px;
+            margin-top: 30px;
+        }
+        
+        .purchase-form h2 {
+            color: var(--red);
+            margin-bottom: 20px;
         }
         
         .form-group {
@@ -343,29 +661,37 @@ if ($user['account_type'] == 'adult') {
         
         .form-group label {
             display: block;
-            color: #00ffff;
+            color: var(--red);
             margin-bottom: 8px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.8rem;
         }
         
         .form-group select,
         .form-group input {
             width: 100%;
-            padding: 12px;
-            background: #000;
-            border: 1px solid #333;
-            color: #fff;
-            border-radius: 4px;
-            font-size: 1rem;
+            padding: 14px 18px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            color: var(--text-primary);
+            border-radius: 40px;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.3s;
         }
         
-        .form-group select:focus {
-            border-color: #00ffff;
+        .form-group select:focus,
+        .form-group input:focus {
+            border-color: var(--red);
             outline: none;
+            box-shadow: 0 0 20px rgba(229, 9, 20, 0.2);
         }
         
+        /* Price Breakdown */
         .price-breakdown {
-            background: #000;
-            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 16px;
             padding: 20px;
             margin: 20px 0;
         }
@@ -374,34 +700,60 @@ if ($user['account_type'] == 'adult') {
             display: flex;
             justify-content: space-between;
             margin: 10px 0;
-            color: #888;
+            color: var(--text-secondary);
         }
         
         .price-row.total {
             margin-top: 15px;
             padding-top: 15px;
-            border-top: 2px solid #00ffff;
-            color: #00ffff;
+            border-top: 2px solid var(--red);
+            color: var(--red);
             font-size: 1.3rem;
-            font-weight: bold;
+            font-weight: 700;
         }
         
+        .price-row span:last-child {
+            color: var(--red);
+            font-weight: 600;
+        }
+        
+        /* Proceed Button */
         .proceed-btn {
             width: 100%;
-            padding: 15px;
-            background: #00ffff;
-            color: #000;
+            padding: 16px;
+            background: var(--red);
+            color: #fff;
             border: none;
-            border-radius: 4px;
+            border-radius: 40px;
             font-size: 1.2rem;
-            font-weight: bold;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .proceed-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
         }
         
         .proceed-btn:hover:not(:disabled) {
-            box-shadow: 0 0 30px #00ffff;
-            transform: scale(1.02);
+            background: var(--red-dark);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.4);
+        }
+        
+        .proceed-btn:hover:not(:disabled)::before {
+            left: 100%;
         }
         
         .proceed-btn:disabled {
@@ -409,75 +761,45 @@ if ($user['account_type'] == 'adult') {
             cursor: not-allowed;
         }
         
-        .selected-info {
+        /* Cinema Strip Divider */
+        .cinema-strip {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
             margin: 20px 0;
-            padding: 15px;
-            background: #000;
-            border-radius: 4px;
-            color: #00ffff;
-            text-align: center;
+            opacity: 0.3;
         }
         
-        .legend {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            margin: 20px 0;
-        }
-        
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: #888;
-        }
-        
-        .legend-box {
-            width: 20px;
-            height: 20px;
-            border: 2px solid;
-        }
-        
-        .legend-box.available { border-color: #333; }
-        .legend-box.selected { background: #00ffff; border-color: #00ffff; }
-        .legend-box.booked { background: #333; border-color: #444; }
-        
-        .online-benefits {
-            background: rgba(0, 255, 255, 0.1);
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-        }
-        
-        .online-benefits h3 {
-            color: #00ffff;
-            margin-bottom: 15px;
-        }
-        
-        .online-benefits ul {
-            list-style: none;
-            padding: 0;
-        }
-        
-        .online-benefits li {
-            color: #888;
-            margin: 10px 0;
-            padding-left: 25px;
-            position: relative;
-        }
-        
-        .online-benefits li:before {
-            content: "✓";
-            color: #00ffff;
-            position: absolute;
-            left: 0;
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+            
+            .movie-summary {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+            }
+            
+            .meta-info {
+                justify-content: center;
+            }
+            
+            .seat-map {
+                grid-template-columns: repeat(4, 1fr);
+            }
+            
+            .legend {
+                flex-direction: column;
+                align-items: center;
+            }
         }
     </style>
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-container">
-            <a href="../index.php" class="logo">🎬 CinemaTicket</a>
+            <a href="../index.php" class="logo">CINEMA TICKET</a>
             <div class="nav-links">
                 <a href="movies.php">Movies</a>
                 <a href="favorites.php">Favorites</a>
@@ -493,15 +815,21 @@ if ($user['account_type'] == 'adult') {
     <main class="container purchase-container">
         <!-- Movie Summary -->
         <div class="movie-summary">
-            <img src="../uploads/posters/<?php echo $poster; ?>" 
-                 alt="<?php echo htmlspecialchars($item_name); ?>" 
-                 class="summary-poster">
+            <?php if ($poster): ?>
+                <img src="../uploads/posters/<?php echo $poster; ?>" 
+                     alt="<?php echo htmlspecialchars($item_name); ?>" 
+                     class="summary-poster">
+            <?php else: ?>
+                <div style="width:120px; height:170px; background:var(--deep-gray); border:2px solid rgba(229,9,20,0.3); border-radius:12px; display:flex; align-items:center; justify-content:center; color:var(--text-secondary);">
+                    No Poster
+                </div>
+            <?php endif; ?>
             
             <div class="summary-details">
                 <h1><?php echo htmlspecialchars($item_name); ?></h1>
                 
                 <div class="meta-info">
-                    <span class="rating-badge rating-<?php echo $rating; ?>">
+                    <span class="rating-badge rating-<?php echo str_replace('-', '', $rating); ?>">
                         <?php echo $rating; ?>
                     </span>
                     <span>⏱️ <?php echo $duration; ?> min</span>
@@ -511,25 +839,28 @@ if ($user['account_type'] == 'adult') {
                 </div>
                 
                 <?php if ($ticket_type == 'physical'): ?>
-                    <p style="color: #888;">
-                        <strong style="color: #00ffff;"><?php echo htmlspecialchars($cinema_name); ?></strong><br>
+                    <div class="location-info">
+                        <strong><?php echo htmlspecialchars($cinema_name); ?></strong><br>
                         📍 <?php echo htmlspecialchars($location); ?><br>
                         🎬 Screen <?php echo $screen_number; ?><br>
                         📅 <?php echo date('F d, Y', strtotime($show_date)); ?> at <?php echo date('h:i A', strtotime($show_time)); ?>
-                    </p>
+                    </div>
                 <?php else: ?>
-                    <p style="color: #888;">
-                        <strong style="color: #00ffff;">Online Streaming</strong><br>
+                    <div class="location-info">
+                        <strong>Online Streaming</strong><br>
                         Watch anywhere, anytime with 3 views per ticket
-                    </p>
+                    </div>
                 <?php endif; ?>
             </div>
         </div>
         
+        <!-- Cinema Strip Divider -->
+        <div class="cinema-strip"></div>
+        
         <?php if ($ticket_type == 'online'): ?>
             <!-- Online Schedule Selection -->
             <div class="purchase-form">
-                <h2 style="color: #00ffff; margin-bottom: 20px;">Select Streaming Time</h2>
+                <h2>Select Streaming Time</h2>
                 
                 <div class="online-benefits">
                     <h3>🎥 Online Streaming Benefits</h3>
@@ -539,7 +870,7 @@ if ($user['account_type'] == 'adult') {
                         <li>Valid for 30 days after purchase</li>
                         <li>HD streaming quality</li>
                         <li>Pause and resume anytime</li>
-                        <li><span style="color: #00ffff;">20% discount</span> applied to online tickets</li>
+                        <li><span style="color: var(--red);">20% discount</span> applied to online tickets</li>
                     </ul>
                 </div>
                 
@@ -552,7 +883,7 @@ if ($user['account_type'] == 'adult') {
                             <div class="schedule-time">
                                 🕐 <?php echo date('h:i A', strtotime($schedule['show_time'])); ?>
                             </div>
-                            <div style="color: #888;">
+                            <div class="schedule-date">
                                 <?php echo date('F d, Y', strtotime($schedule['show_date'])); ?>
                             </div>
                             <div class="availability <?php echo $status_class; ?>">
@@ -569,7 +900,7 @@ if ($user['account_type'] == 'adult') {
                     <input type="hidden" name="online_id" id="selectedScheduleId">
                     
                     <div class="form-group">
-                        <label for="quantity">Number of Tickets</label>
+                        <label>Number of Tickets</label>
                         <select name="quantity" id="quantity" required>
                             <?php for ($i = 1; $i <= 10; $i++): ?>
                                 <option value="<?php echo $i; ?>"><?php echo $i; ?> ticket<?php echo $i > 1 ? 's' : ''; ?></option>
@@ -584,7 +915,7 @@ if ($user['account_type'] == 'adult') {
                         </div>
                         <div class="price-row">
                             <span>Processing Fee (₱150 each):</span>
-                            <span id="feePerTicket">$<?php echo number_format($processing_fee, 2); ?></span>
+                            <span>$<?php echo number_format($processing_fee, 2); ?></span>
                         </div>
                         <div class="price-row" id="subtotalRow">
                             <span>Subtotal:</span>
@@ -607,26 +938,20 @@ if ($user['account_type'] == 'adult') {
                 const processingFee = <?php echo $processing_fee; ?>;
                 
                 function selectSchedule(scheduleId, price, element) {
-                    // Remove selected class from all cards
                     document.querySelectorAll('.schedule-card').forEach(card => {
                         card.classList.remove('selected');
                     });
                     
-                    // Add selected class to clicked card
                     element.classList.add('selected');
                     
-                    // Update hidden input
                     selectedSchedulePrice = price;
                     document.getElementById('selectedScheduleId').value = scheduleId;
                     
-                    // Show price breakdown
                     document.getElementById('priceBreakdown').style.display = 'block';
                     document.getElementById('perTicketPrice').textContent = '$' + price.toFixed(2);
                     
-                    // Enable proceed button
                     document.getElementById('proceedBtn').disabled = false;
                     
-                    // Update prices
                     updatePrice();
                 }
                 
@@ -642,7 +967,6 @@ if ($user['account_type'] == 'adult') {
                 
                 document.getElementById('quantity').addEventListener('change', updatePrice);
                 
-                // Form validation
                 document.getElementById('onlineForm').addEventListener('submit', function(e) {
                     if (!document.getElementById('selectedScheduleId').value) {
                         e.preventDefault();
@@ -654,7 +978,7 @@ if ($user['account_type'] == 'adult') {
         <?php else: ?>
             <!-- Physical Ticket Seat Selection -->
             <div class="seat-selection">
-                <h2 style="color: #00ffff; margin-bottom: 20px;">Select Your Seats</h2>
+                <h2>Select Your Seats</h2>
                 
                 <div class="legend">
                     <div class="legend-item">
@@ -693,7 +1017,7 @@ if ($user['account_type'] == 'adult') {
                 <form method="POST" id="physicalForm">
                     <?php if (!empty($linked_accounts)): ?>
                         <div class="form-group">
-                            <label for="for_user_id">Purchase for:</label>
+                            <label>Purchase for:</label>
                             <select name="for_user_id" id="for_user_id">
                                 <option value="<?php echo $user['id']; ?>">
                                     Myself (<?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?>)
@@ -709,7 +1033,7 @@ if ($user['account_type'] == 'adult') {
                     <?php endif; ?>
                     
                     <div class="form-group">
-                        <label for="quantity">Number of Tickets</label>
+                        <label>Number of Tickets</label>
                         <select name="quantity" id="quantity" onchange="updateQuantity()">
                             <?php for ($i = 1; $i <= min(10, $available_seats); $i++): ?>
                                 <option value="<?php echo $i; ?>"><?php echo $i; ?> ticket<?php echo $i > 1 ? 's' : ''; ?></option>
@@ -792,7 +1116,6 @@ if ($user['account_type'] == 'adult') {
                 function updateQuantity() {
                     const quantity = parseInt(document.getElementById('quantity').value);
                     
-                    // Remove extra selections
                     while (selectedSeats.length > quantity) {
                         const removed = selectedSeats.pop();
                         const seat = document.querySelector(`[data-seat="${removed}"]`);
@@ -802,7 +1125,6 @@ if ($user['account_type'] == 'adult') {
                     updateSelectedSeats();
                     updateProceedButton();
                     
-                    // Update price
                     const subtotal = basePrice * quantity;
                     const totalFee = processingFee * quantity;
                     const total = subtotal + totalFee;
@@ -821,7 +1143,6 @@ if ($user['account_type'] == 'adult') {
                     document.getElementById('total').textContent = '$' + total.toFixed(2);
                 }
                 
-                // Form validation
                 document.getElementById('physicalForm').addEventListener('submit', function(e) {
                     const quantity = parseInt(document.getElementById('quantity').value);
                     if (selectedSeats.length !== quantity) {

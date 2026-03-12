@@ -232,148 +232,474 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Payment - CinemaTicket</title>
     <link rel="stylesheet" href="../assets/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --black: #0a0a0a;
+            --deep-gray: #1a1a1a;
+            --medium-gray: #2a2a2a;
+            --light-gray: #333333;
+            --red: #e50914;
+            --red-dark: #b2070f;
+            --red-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #b3b3b3;
+            --glass-bg: rgba(26, 26, 26, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.05);
+            --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: var(--black);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-weight: 400;
+            line-height: 1.6;
+            min-height: 100vh;
+            position: relative;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 20% 50%, rgba(229, 9, 20, 0.03) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, rgba(229, 9, 20, 0.03) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        /* Navigation */
+        .navbar {
+            background: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 30px;
+        }
+        
+        .logo {
+            color: var(--red);
+            font-size: 1.8rem;
+            font-weight: 800;
+            font-family: 'Montserrat', sans-serif;
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            position: relative;
+            transition: all 0.3s;
+        }
+        
+        .logo:hover {
+            text-shadow: var(--red-glow);
+        }
+        
+        .logo::before {
+            content: "🎬";
+            margin-right: 10px;
+            font-size: 1.5rem;
+            filter: drop-shadow(0 0 5px var(--red));
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 25px;
+            align-items: center;
+        }
+        
+        .nav-links a {
+            color: var(--text-primary);
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: all 0.3s;
+            font-weight: 500;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+        }
+        
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 2px;
+            background: var(--red);
+            transition: width 0.3s;
+        }
+        
+        .nav-links a:hover {
+            color: var(--red);
+        }
+        
+        .nav-links a:hover::after {
+            width: 60%;
+        }
+        
+        .nav-links a.active {
+            color: var(--red);
+        }
+        
+        .nav-links a.active::after {
+            width: 60%;
+        }
+        
+        /* Main Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0 0 30px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
         .payment-container {
             max-width: 800px;
             margin: 0 auto;
         }
+        
+        /* Cards */
         .card {
-            background: #1a1a1a;
-            border: 2px solid #00ffff;
-            border-radius: 8px;
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 24px;
             padding: 30px;
             margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
         }
-        .row {
-            display: flex;
-            justify-content: space-between;
-            margin: 10px 0;
-            padding: 10px 0;
-            border-bottom: 1px solid #333;
+        
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            animation: slideBorder 3s infinite;
         }
-        .total {
-            font-size: 1.3rem;
-            color: #00ffff;
-            font-weight: bold;
-            border-top: 2px solid #00ffff;
-            margin-top: 20px;
-            padding-top: 20px;
+        
+        @keyframes slideBorder {
+            0% { transform: translateX(-100%); }
+            50% { transform: translateX(100%); }
+            100% { transform: translateX(100%); }
         }
-        .form-group {
+        
+        .card h2 {
+            color: var(--red);
             margin-bottom: 20px;
+            font-size: 1.5rem;
+            font-weight: 600;
         }
-        .form-group label {
-            display: block;
-            color: #00ffff;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-        .form-group input, .form-group select {
-            width: 100%;
-            padding: 12px;
-            background: #000;
-            border: 1px solid #333;
-            color: #fff;
-            border-radius: 4px;
-        }
-        .form-group input:focus, .form-group select:focus {
-            border-color: #00ffff;
-            outline: none;
-        }
-        .form-group small {
-            display: block;
-            color: #888;
-            font-size: 0.8rem;
-            margin-top: 5px;
-        }
-        .pay-button {
-            width: 100%;
-            padding: 15px;
-            background: #00ffff;
-            color: #000;
-            border: none;
-            border-radius: 4px;
-            font-size: 1.2rem;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 20px;
-        }
-        .pay-button:hover {
-            box-shadow: 0 0 30px #00ffff;
-        }
-        .error {
-            color: #ff4444;
+        
+        /* Parent Notice */
+        .parent-notice {
+            background: rgba(229, 9, 20, 0.1);
+            border: 1px solid var(--red);
+            color: var(--text-primary);
+            padding: 15px 20px;
+            border-radius: 40px;
             margin-bottom: 20px;
-            padding: 10px;
-            background: rgba(255,68,68,0.1);
-            border: 1px solid #ff4444;
-            border-radius: 4px;
+            border-left: 4px solid var(--red);
         }
+        
+        /* Movie Summary */
         .movie-summary {
             display: flex;
             gap: 20px;
             margin-bottom: 20px;
             padding-bottom: 20px;
-            border-bottom: 1px solid #333;
+            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
         }
+        
         .poster {
             width: 80px;
             height: 120px;
             object-fit: cover;
-            border: 1px solid #00ffff;
-            border-radius: 4px;
+            border: 2px solid rgba(229, 9, 20, 0.3);
+            border-radius: 8px;
+            transition: all 0.3s;
         }
-        .parent-notice {
-            background: rgba(255, 255, 68, 0.1);
-            border: 1px solid #ffff44;
+        
+        .poster:hover {
+            border-color: var(--red);
+            transform: scale(1.05);
+        }
+        
+        .movie-details h3 {
+            color: #fff;
+            margin-bottom: 5px;
+            font-size: 1.2rem;
+        }
+        
+        .movie-details p {
+            color: var(--text-secondary);
+            margin: 2px 0;
+        }
+        
+        .movie-details .highlight {
+            color: var(--red);
+            font-weight: 600;
+        }
+        
+        .movie-details .for-user {
             color: #ffff44;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+            margin-top: 5px;
         }
+        
+        /* Expiry Info */
         .expiry-info {
-            background: #000;
-            border: 1px solid #00ffff;
-            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 16px;
             padding: 15px;
             margin: 20px 0;
-            color: #888;
+            color: var(--text-secondary);
         }
+        
         .expiry-info strong {
-            color: #00ffff;
+            color: var(--red);
         }
-        .cvv-info {
-            background: #333;
-            color: #888;
-            padding: 10px;
-            border-radius: 4px;
+        
+        .expiry-info small {
+            display: block;
             margin-top: 5px;
-            font-size: 0.9rem;
+            color: #666;
         }
+        
+        /* Order Rows */
+        .row {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(229, 9, 20, 0.1);
+            color: var(--text-secondary);
+        }
+        
+        .total {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--red);
+            border-top: 2px solid var(--red);
+            margin-top: 20px;
+            padding-top: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        .form-group label {
+            display: block;
+            color: var(--red);
+            margin-bottom: 8px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.8rem;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 14px 18px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            color: var(--text-primary);
+            border-radius: 40px;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.3s;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            border-color: var(--red);
+            outline: none;
+            box-shadow: 0 0 20px rgba(229, 9, 20, 0.2);
+        }
+        
+        .form-group small {
+            display: block;
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            margin-top: 5px;
+            padding-left: 15px;
+        }
+        
+        /* File Upload */
         .file-upload {
-            border: 2px dashed #00ffff;
-            padding: 20px;
+            border: 2px dashed rgba(229, 9, 20, 0.3);
+            padding: 25px;
             text-align: center;
-            border-radius: 8px;
+            border-radius: 40px;
             cursor: pointer;
             transition: all 0.3s;
         }
+        
         .file-upload:hover {
-            background: rgba(0,255,255,0.1);
+            border-color: var(--red);
+            background: rgba(229, 9, 20, 0.05);
         }
+        
         .file-upload input {
             display: none;
         }
+        
+        .file-upload span {
+            color: var(--text-secondary);
+        }
+        
         .file-name {
             margin-top: 10px;
-            color: #00ffff;
+            color: var(--red);
+            font-size: 0.9rem;
+        }
+        
+        /* Pay Button */
+        .pay-button {
+            width: 100%;
+            padding: 16px;
+            background: var(--red);
+            color: #fff;
+            border: none;
+            border-radius: 40px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .pay-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .pay-button:hover {
+            background: var(--red-dark);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.4);
+        }
+        
+        .pay-button:hover::before {
+            left: 100%;
+        }
+        
+        /* Info Box */
+        .info-box {
+            margin-top: 20px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 16px;
+            border: 1px solid rgba(229, 9, 20, 0.1);
+        }
+        
+        .info-box p {
+            color: var(--text-secondary);
+            margin: 5px 0;
+        }
+        
+        .info-box strong {
+            color: var(--red);
+        }
+        
+        /* Error */
+        .error {
+            color: #ff4444;
+            margin-bottom: 20px;
+            padding: 15px 20px;
+            background: rgba(255, 68, 68, 0.1);
+            border: 1px solid #ff4444;
+            border-radius: 40px;
+            border-left: 4px solid #ff4444;
+        }
+        
+        /* Cinema Strip Divider */
+        .cinema-strip {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            margin: 20px 0;
+            opacity: 0.3;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .movie-summary {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+            }
+            
+            .card {
+                padding: 20px;
+            }
         }
     </style>
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-container">
-            <a href="../index.php" class="logo">🎬 CinemaTicket</a>
+            <a href="../index.php" class="logo">CINEMA TICKET</a>
             <div class="nav-links">
                 <a href="movies.php">Movies</a>
                 <a href="favorites.php">Favorites</a>
@@ -387,7 +713,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     </nav>
     
     <main class="container">
-        <h1>Payment</h1>
+        <h1>Complete Payment</h1>
         
         <!-- Parent notice for kids/teens -->
         <?php if ($user['parent_id'] && $parent): ?>
@@ -396,6 +722,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             </div>
         <?php endif; ?>
         
+        <!-- Cinema Strip Divider -->
+        <div class="cinema-strip"></div>
+        
         <?php if (isset($error)): ?>
             <div class="error"><?php echo htmlspecialchars($error); ?></div>
         <?php endif; ?>
@@ -403,15 +732,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <div class="payment-container">
             <!-- Order Summary -->
             <div class="card">
-                <h2 style="color:#00ffff; margin-bottom:20px;">Order Summary</h2>
+                <h2>Order Summary</h2>
                 
                 <div class="movie-summary">
-                    <img src="../uploads/posters/<?php echo $item['poster']; ?>" class="poster">
-                    <div>
-                        <h3 style="color:#fff;"><?php echo htmlspecialchars($item['title']); ?></h3>
-                        <p style="color:#888;"><?php echo ucfirst($type); ?> Ticket</p>
+                    <?php if ($item['poster']): ?>
+                        <img src="../uploads/posters/<?php echo $item['poster']; ?>" class="poster">
+                    <?php else: ?>
+                        <div style="width:80px; height:120px; background:var(--deep-gray); border:2px solid rgba(229,9,20,0.3); border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--text-secondary);">
+                            No Poster
+                        </div>
+                    <?php endif; ?>
+                    
+                    <div class="movie-details">
+                        <h3><?php echo htmlspecialchars($item['title']); ?></h3>
+                        <p><?php echo ucfirst($type); ?> Ticket</p>
                         <?php if ($type == 'cinema' && !empty($selected_seats)): ?>
-                            <p style="color:#00ffff;">Seats: <?php echo implode(', ', $selected_seats); ?></p>
+                            <p class="highlight">Seats: <?php echo implode(', ', $selected_seats); ?></p>
                         <?php endif; ?>
                         <?php if ($for_user_id != $user['id']): ?>
                             <?php
@@ -419,7 +755,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             $stmt->execute([$for_user_id]);
                             $for_user = $stmt->fetch();
                             ?>
-                            <p style="color:#ffff44;">For: <?php echo htmlspecialchars($for_user['first_name'] . ' ' . $for_user['last_name']); ?></p>
+                            <p class="for-user">For: <?php echo htmlspecialchars($for_user['first_name'] . ' ' . $for_user['last_name']); ?></p>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -455,7 +791,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             
             <!-- Payment Form -->
             <div class="card">
-                <h2 style="color:#00ffff; margin-bottom:20px;">Payment Details</h2>
+                <h2>Payment Details</h2>
                 
                 <form method="POST" enctype="multipart/form-data">
                     <div class="form-group">
@@ -476,7 +812,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
                     
                     <div class="form-group">
-                        <label>Proof of Payment (Screenshot/Photo)</label>
+                        <label>Proof of Payment</label>
                         <div class="file-upload" onclick="document.getElementById('proof').click()">
                             <input type="file" id="proof" name="proof" accept="image/*,application/pdf" onchange="updateFileName(this)">
                             <span>📎 Click to upload screenshot or receipt</span>
@@ -490,9 +826,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </button>
                 </form>
                 
-                <div style="margin-top: 20px; padding: 15px; background: #000; border-radius: 4px;">
-                    <p style="color:#888;">📝 <strong>What is CVV?</strong> The 3-digit security code on the back of your credit card.</p>
-                    <p style="color:#888; margin-top:5px;">For GCash/PayPal/Bank Transfer, use the transaction/reference number from your payment app.</p>
+                <div class="info-box">
+                    <p>📝 <strong>What is CVV?</strong> The 3-digit security code on the back of your credit card.</p>
+                    <p>For GCash/PayPal/Bank Transfer, use the transaction/reference number from your payment app.</p>
                 </div>
             </div>
         </div>

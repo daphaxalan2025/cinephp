@@ -169,144 +169,642 @@ foreach ($screenings as $s) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Screenings - Staff</title>
     <link rel="stylesheet" href="../assets/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        .filter-section {
-            background: #1a1a1a;
-            padding: 20px;
-            border-radius: 8px;
-            border: 1px solid #00ffff;
-            margin: 30px 0;
+        :root {
+            --black: #0a0a0a;
+            --deep-gray: #1a1a1a;
+            --medium-gray: #2a2a2a;
+            --light-gray: #333333;
+            --red: #e50914;
+            --red-dark: #b2070f;
+            --red-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #b3b3b3;
+            --glass-bg: rgba(26, 26, 26, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.05);
+            --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
         }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: var(--black);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-weight: 400;
+            line-height: 1.6;
+            min-height: 100vh;
+            position: relative;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 20% 50%, rgba(229, 9, 20, 0.03) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, rgba(229, 9, 20, 0.03) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        /* Navigation */
+        .navbar {
+            background: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 30px;
+        }
+        
+        .logo {
+            color: var(--red);
+            font-size: 1.8rem;
+            font-weight: 800;
+            font-family: 'Montserrat', sans-serif;
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            position: relative;
+            transition: all 0.3s;
+        }
+        
+        .logo:hover {
+            text-shadow: var(--red-glow);
+        }
+        
+        .logo::before {
+            content: "🎬";
+            margin-right: 10px;
+            font-size: 1.5rem;
+            filter: drop-shadow(0 0 5px var(--red));
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 25px;
+            align-items: center;
+        }
+        
+        .nav-links a {
+            color: var(--text-primary);
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: all 0.3s;
+            font-weight: 500;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+        }
+        
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 2px;
+            background: var(--red);
+            transition: width 0.3s;
+        }
+        
+        .nav-links a:hover {
+            color: var(--red);
+        }
+        
+        .nav-links a:hover::after {
+            width: 60%;
+        }
+        
+        .nav-links a.active {
+            color: var(--red);
+        }
+        
+        .nav-links a.active::after {
+            width: 60%;
+        }
+        
+        /* Main Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0 0 30px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        /* Staff Notice */
+        .staff-notice {
+            background: rgba(229, 9, 20, 0.1);
+            border: 1px solid var(--red);
+            color: var(--text-primary);
+            padding: 15px 20px;
+            border-radius: 40px;
+            margin-bottom: 20px;
+            border-left: 4px solid var(--red);
+        }
+        
+        /* Filter Section */
+        .filter-section {
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 24px;
+            padding: 25px;
+            margin: 30px 0;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .filter-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            animation: slideBorder 3s infinite;
+        }
+        
+        @keyframes slideBorder {
+            0% { transform: translateX(-100%); }
+            50% { transform: translateX(100%); }
+            100% { transform: translateX(100%); }
+        }
+        
         .filter-form {
             display: flex;
             gap: 20px;
             flex-wrap: wrap;
             align-items: flex-end;
         }
+        
         .filter-group {
             flex: 1;
             min-width: 200px;
         }
+        
+        .filter-group label {
+            color: var(--red);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.8rem;
+            margin-bottom: 8px;
+            display: block;
+        }
+        
+        .filter-group select,
+        .filter-group input {
+            width: 100%;
+            padding: 12px 18px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            color: var(--text-primary);
+            border-radius: 40px;
+            transition: all 0.3s;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .filter-group select:focus,
+        .filter-group input:focus {
+            border-color: var(--red);
+            outline: none;
+            box-shadow: 0 0 20px rgba(229, 9, 20, 0.2);
+        }
+        
+        /* Date Groups */
         .date-group {
             margin-bottom: 40px;
         }
+        
         .date-title {
-            color: #00ffff;
-            font-size: 1.3rem;
+            color: var(--red);
+            font-size: 1.5rem;
             margin-bottom: 20px;
             padding-bottom: 10px;
-            border-bottom: 2px solid #00ffff;
+            border-bottom: 2px solid rgba(229, 9, 20, 0.2);
+            position: relative;
         }
+        
+        .date-title::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 100px;
+            height: 2px;
+            background: var(--red);
+        }
+        
         .screenings-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
             gap: 20px;
         }
+        
         .screening-card {
-            background: #1a1a1a;
-            border: 2px solid #00ffff;
-            border-radius: 8px;
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.1);
+            border-radius: 16px;
             padding: 20px;
             transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
         }
+        
+        .screening-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            transform: translateX(-100%);
+            animation: slideBorder 3s infinite;
+        }
+        
         .screening-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 0 30px rgba(0,255,255,0.3);
+            border-color: rgba(229, 9, 20, 0.3);
+            box-shadow: 0 20px 40px rgba(229, 9, 20, 0.15);
         }
+        
         .screening-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 15px;
             padding-bottom: 10px;
-            border-bottom: 1px solid #333;
+            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
         }
+        
         .screening-time {
             font-size: 1.3rem;
-            color: #00ffff;
-            font-weight: bold;
+            color: var(--red);
+            font-weight: 700;
+            font-family: 'Montserrat', sans-serif;
         }
+        
         .screen-number {
-            color: #888;
+            color: var(--text-secondary);
         }
+        
         .screening-movie {
             font-size: 1.2rem;
             margin-bottom: 10px;
             color: #fff;
+            font-weight: 600;
         }
+        
         .screening-details {
-            color: #888;
+            color: var(--text-secondary);
             margin-bottom: 15px;
         }
+        
         .seat-info {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin: 15px 0;
             padding: 10px;
-            background: #000;
-            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 40px;
         }
+        
         .available-seats {
             color: #44ff44;
-            font-weight: bold;
+            font-weight: 600;
         }
+        
         .sold-seats {
             color: #ffff44;
+            font-weight: 600;
         }
+        
         .progress-bar {
             height: 8px;
-            background: #333;
+            background: rgba(255, 255, 255, 0.1);
             border-radius: 4px;
             overflow: hidden;
             margin: 10px 0;
         }
+        
         .progress-fill {
             height: 100%;
-            background: #00ffff;
+            background: var(--red);
             border-radius: 4px;
         }
+        
         .screening-actions {
             display: flex;
             gap: 10px;
             margin-top: 15px;
         }
+        
         .btn-small {
             flex: 1;
             text-align: center;
-            padding: 8px;
-            border: 1px solid #00ffff;
-            border-radius: 4px;
-            color: #00ffff;
+            padding: 10px;
+            border: 1px solid rgba(229, 9, 20, 0.3);
+            border-radius: 40px;
+            color: var(--text-primary);
             text-decoration: none;
             transition: all 0.3s;
+            font-size: 0.85rem;
+            font-weight: 500;
         }
+        
         .btn-small:hover {
-            background: #00ffff;
-            color: #000;
+            border-color: var(--red);
+            color: var(--red);
+            background: rgba(229, 9, 20, 0.1);
         }
+        
         .btn-small.delete {
             border-color: #ff4444;
             color: #ff4444;
         }
+        
         .btn-small.delete:hover {
             background: #ff4444;
-            color: #000;
+            color: #fff;
         }
-        .staff-notice {
-            background: rgba(255,255,68,0.1);
-            border: 1px solid #ffff44;
-            color: #ffff44;
-            padding: 15px;
-            border-radius: 8px;
+        
+        /* Form Container */
+        .form-container {
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 24px;
+            padding: 40px;
+            margin-bottom: 40px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .form-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            animation: slideBorder 3s infinite;
+        }
+        
+        .form-container h2 {
+            color: var(--red);
+            font-size: 2rem;
+            margin-bottom: 25px;
+        }
+        
+        .form-group {
             margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            color: var(--red);
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.8rem;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 14px 18px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            color: var(--text-primary);
+            border-radius: 40px;
+            transition: all 0.3s;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            border-color: var(--red);
+            outline: none;
+            box-shadow: 0 0 20px rgba(229, 9, 20, 0.2);
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .form-text {
+            display: block;
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            margin-top: 5px;
+            padding-left: 15px;
+        }
+        
+        .btn-primary {
+            background: var(--red);
+            color: #fff;
+            border: none;
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            font-size: 0.9rem;
+            padding: 14px 30px;
+            border-radius: 40px;
+            transition: all 0.3s;
+            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .btn-primary:hover {
+            background: var(--red-dark);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px rgba(229, 9, 20, 0.4);
+        }
+        
+        .btn-primary:hover::before {
+            left: 100%;
+        }
+        
+        .btn {
+            border: 1px solid rgba(229, 9, 20, 0.3);
+            color: var(--text-primary);
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 500;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            font-size: 0.9rem;
+            padding: 14px 30px;
+            border-radius: 40px;
+            background: transparent;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn:hover {
+            border-color: var(--red);
+            color: var(--red);
+            transform: translateY(-2px);
+        }
+        
+        /* Alerts */
+        .alert {
+            padding: 18px 25px;
+            margin-bottom: 20px;
+            border-radius: 40px;
+            animation: slideIn 0.3s ease;
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+        }
+        
+        .alert-error {
+            border-left: 4px solid #ff4444;
+            color: #ff6b6b;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 80px 40px;
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 32px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .empty-state::before {
+            content: '🎬';
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            font-size: 6rem;
+            opacity: 0.03;
+            pointer-events: none;
+        }
+        
+        .empty-state p {
+            color: var(--text-secondary);
+        }
+        
+        /* Cinema Strip Divider */
+        .cinema-strip {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            margin: 20px 0 30px;
+            opacity: 0.3;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .filter-form {
+                flex-direction: column;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .screening-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 5px;
+            }
+            
+            .screening-actions {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-container">
-            <a href="../index.php" class="logo">🎬 CinemaTicket Staff</a>
+            <a href="../index.php" class="logo">CINEMA TICKET STAFF</a>
             <div class="nav-links">
                 <a href="dashboard.php">Dashboard</a>
                 <a href="cinemas.php">Cinemas</a>
@@ -323,8 +821,11 @@ foreach ($screenings as $s) {
     <main class="container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
             <h1>Manage Screenings</h1>
-            <a href="?action=add" class="btn btn-primary">➕ Add New Screening</a>
+            <a href="?action=add" class="btn-primary">➕ Add Screening</a>
         </div>
+        
+        <!-- Cinema Strip Divider -->
+        <div class="cinema-strip"></div>
         
         <?php if ($cinema_id): ?>
             <div class="staff-notice">
@@ -334,7 +835,7 @@ foreach ($screenings as $s) {
         
         <?php if (!empty($errors)): ?>
             <div class="alert alert-error">
-                <ul>
+                <ul style="margin-left: 20px; margin-bottom: 0;">
                     <?php foreach ($errors as $error): ?>
                         <li><?php echo htmlspecialchars($error); ?></li>
                     <?php endforeach; ?>
@@ -344,8 +845,8 @@ foreach ($screenings as $s) {
         
         <!-- Add/Edit Form -->
         <?php if (isset($_GET['action']) || isset($_GET['edit'])): ?>
-            <div style="background: #1a1a1a; padding: 30px; border: 2px solid #00ffff; border-radius: 8px; margin-bottom: 40px;">
-                <h2 style="color:#00ffff; margin-bottom:20px;">
+            <div class="form-container">
+                <h2>
                     <?php echo $edit_screening ? 'Edit Screening' : 'Add New Screening'; ?>
                 </h2>
                 
@@ -356,8 +857,8 @@ foreach ($screenings as $s) {
                     
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="movie_id">Movie</label>
-                            <select id="movie_id" name="movie_id" required>
+                            <label>Movie</label>
+                            <select name="movie_id" required>
                                 <option value="">Select Movie</option>
                                 <?php foreach ($movies as $movie): ?>
                                     <option value="<?php echo $movie['id']; ?>"
@@ -369,8 +870,8 @@ foreach ($screenings as $s) {
                         </div>
                         
                         <div class="form-group">
-                            <label for="cinema_id">Cinema</label>
-                            <select id="cinema_id" name="cinema_id" required>
+                            <label>Cinema</label>
+                            <select name="cinema_id" required>
                                 <option value="">Select Cinema</option>
                                 <?php foreach ($cinemas as $cinema): ?>
                                     <option value="<?php echo $cinema['id']; ?>"
@@ -384,15 +885,15 @@ foreach ($screenings as $s) {
                     
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="screen_number">Screen Number</label>
-                            <input type="number" id="screen_number" name="screen_number" 
+                            <label>Screen Number</label>
+                            <input type="number" name="screen_number" 
                                    value="<?php echo $edit_screening['screen_number'] ?? '1'; ?>" 
                                    min="1" max="20" required>
                         </div>
                         
                         <div class="form-group">
-                            <label for="price">Price ($)</label>
-                            <input type="number" id="price" name="price" step="0.01" 
+                            <label>Price ($)</label>
+                            <input type="number" name="price" step="0.01" 
                                    value="<?php echo $edit_screening['price'] ?? '12.50'; ?>" 
                                    min="0" required>
                         </div>
@@ -400,30 +901,30 @@ foreach ($screenings as $s) {
                     
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="show_date">Show Date</label>
-                            <input type="date" id="show_date" name="show_date" 
+                            <label>Show Date</label>
+                            <input type="date" name="show_date" 
                                    value="<?php echo $edit_screening['show_date'] ?? date('Y-m-d'); ?>" 
                                    min="<?php echo date('Y-m-d'); ?>" required>
                         </div>
                         
                         <div class="form-group">
-                            <label for="show_time">Show Time</label>
-                            <input type="time" id="show_time" name="show_time" 
+                            <label>Show Time</label>
+                            <input type="time" name="show_time" 
                                    value="<?php echo $edit_screening['show_time'] ?? '10:00'; ?>" 
                                    required>
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label for="available_seats">Available Seats</label>
-                        <input type="number" id="available_seats" name="available_seats" 
+                        <label>Available Seats</label>
+                        <input type="number" name="available_seats" 
                                value="<?php echo $edit_screening['available_seats'] ?? '40'; ?>" 
                                min="1" max="100" required>
                         <small class="form-text">Maximum 5 screenings per screen per day</small>
                     </div>
                     
                     <div style="display: flex; gap: 10px;">
-                        <button type="submit" class="btn btn-primary">
+                        <button type="submit" class="btn-primary">
                             <?php echo $edit_screening ? 'Update Screening' : 'Add Screening'; ?>
                         </button>
                         <a href="screenings.php" class="btn">Cancel</a>
@@ -436,8 +937,8 @@ foreach ($screenings as $s) {
         <div class="filter-section">
             <form method="GET" class="filter-form">
                 <div class="filter-group">
-                    <label for="filter_cinema">Filter by Cinema</label>
-                    <select id="filter_cinema" name="cinema_id">
+                    <label>Filter by Cinema</label>
+                    <select name="cinema_id">
                         <option value="">All Cinemas</option>
                         <?php foreach ($cinemas as $cinema): ?>
                             <option value="<?php echo $cinema['id']; ?>" <?php echo $filter_cinema == $cinema['id'] ? 'selected' : ''; ?>>
@@ -448,8 +949,8 @@ foreach ($screenings as $s) {
                 </div>
                 
                 <div class="filter-group">
-                    <label for="filter_movie">Filter by Movie</label>
-                    <select id="filter_movie" name="movie_id">
+                    <label>Filter by Movie</label>
+                    <select name="movie_id">
                         <option value="">All Movies</option>
                         <?php foreach ($movies as $movie): ?>
                             <option value="<?php echo $movie['id']; ?>" <?php echo $filter_movie == $movie['id'] ? 'selected' : ''; ?>>
@@ -460,12 +961,12 @@ foreach ($screenings as $s) {
                 </div>
                 
                 <div class="filter-group">
-                    <label for="filter_date">Filter by Date</label>
-                    <input type="date" id="filter_date" name="date" value="<?php echo $filter_date; ?>">
+                    <label>Filter by Date</label>
+                    <input type="date" name="date" value="<?php echo $filter_date; ?>">
                 </div>
                 
                 <div>
-                    <button type="submit" class="btn btn-primary">Apply Filters</button>
+                    <button type="submit" class="btn-primary">Apply</button>
                     <a href="screenings.php" class="btn">Clear</a>
                 </div>
             </form>
@@ -473,8 +974,9 @@ foreach ($screenings as $s) {
         
         <!-- Screenings Display -->
         <?php if (empty($screenings)): ?>
-            <div style="text-align: center; padding: 60px; background: #1a1a1a; border: 2px solid #00ffff; border-radius: 8px;">
-                <p style="color: #888;">No screenings found.</p>
+            <div class="empty-state">
+                <p style="margin-bottom: 10px;">No screenings found.</p>
+                <p style="color: var(--text-secondary);">Use the filters above or add a new screening.</p>
             </div>
         <?php else: ?>
             <?php foreach ($grouped_screenings as $date => $screenings): ?>
@@ -513,13 +1015,13 @@ foreach ($screenings as $s) {
                                 </div>
                                 
                                 <div style="display: flex; justify-content: space-between; margin: 15px 0;">
-                                    <span>Price: $<?php echo number_format($screening['price'], 2); ?></span>
-                                    <span>Total: $<?php echo number_format($screening['price'] * $sold, 2); ?></span>
+                                    <span>Price: <span style="color: var(--red);">$<?php echo number_format($screening['price'], 2); ?></span></span>
+                                    <span>Total: <span style="color: var(--red);">$<?php echo number_format($screening['price'] * $sold, 2); ?></span></span>
                                 </div>
                                 
                                 <div class="screening-actions">
                                     <a href="?edit=<?php echo $screening['id']; ?>" class="btn-small">Edit</a>
-                                    <a href="tickets_list.php?screening_id=<?php echo $screening['id']; ?>" class="btn-small">View Tickets</a>
+                                    <a href="tickets_list.php?screening_id=<?php echo $screening['id']; ?>" class="btn-small">Tickets</a>
                                     <a href="?delete=<?php echo $screening['id']; ?>" class="btn-small delete" 
                                        onclick="return confirm('Delete this screening?')">Delete</a>
                                 </div>

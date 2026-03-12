@@ -57,48 +57,337 @@ if ($user['parent_id']) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Select Seats - <?php echo htmlspecialchars($screening['title']); ?></title>
     <link rel="stylesheet" href="../assets/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --black: #0a0a0a;
+            --deep-gray: #1a1a1a;
+            --medium-gray: #2a2a2a;
+            --light-gray: #333333;
+            --red: #e50914;
+            --red-dark: #b2070f;
+            --red-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #b3b3b3;
+            --glass-bg: rgba(26, 26, 26, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.05);
+            --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: var(--black);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-weight: 400;
+            line-height: 1.6;
+            min-height: 100vh;
+            position: relative;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 20% 50%, rgba(229, 9, 20, 0.03) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, rgba(229, 9, 20, 0.03) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        /* Navigation */
+        .navbar {
+            background: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 30px;
+        }
+        
+        .logo {
+            color: var(--red);
+            font-size: 1.8rem;
+            font-weight: 800;
+            font-family: 'Montserrat', sans-serif;
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            position: relative;
+            transition: all 0.3s;
+        }
+        
+        .logo:hover {
+            text-shadow: var(--red-glow);
+        }
+        
+        .logo::before {
+            content: "🎬";
+            margin-right: 10px;
+            font-size: 1.5rem;
+            filter: drop-shadow(0 0 5px var(--red));
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 25px;
+            align-items: center;
+        }
+        
+        .nav-links a {
+            color: var(--text-primary);
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: all 0.3s;
+            font-weight: 500;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+        }
+        
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 2px;
+            background: var(--red);
+            transition: width 0.3s;
+        }
+        
+        .nav-links a:hover {
+            color: var(--red);
+        }
+        
+        .nav-links a:hover::after {
+            width: 60%;
+        }
+        
+        .nav-links a.active {
+            color: var(--red);
+        }
+        
+        .nav-links a.active::after {
+            width: 60%;
+        }
+        
+        /* Main Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0 0 30px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        /* Selection Container */
         .selection-container {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1.5fr;
             gap: 30px;
             margin-top: 30px;
         }
+        
+        /* Movie Info Card */
         .movie-info {
-            background: #1a1a1a;
-            border: 2px solid #00ffff;
-            border-radius: 8px;
-            padding: 20px;
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 24px;
+            padding: 25px;
+            position: relative;
+            overflow: hidden;
         }
+        
+        .movie-info::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            animation: slideBorder 3s infinite;
+        }
+        
+        @keyframes slideBorder {
+            0% { transform: translateX(-100%); }
+            50% { transform: translateX(100%); }
+            100% { transform: translateX(100%); }
+        }
+        
+        .movie-info h2 {
+            color: var(--red);
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+        }
+        
         .movie-poster {
             width: 100%;
             max-width: 200px;
-            border-radius: 8px;
-            border: 1px solid #00ffff;
+            border-radius: 12px;
+            border: 2px solid rgba(229, 9, 20, 0.3);
             margin-bottom: 20px;
+            transition: all 0.3s;
         }
+        
+        .movie-poster:hover {
+            border-color: var(--red);
+            transform: scale(1.05);
+        }
+        
+        .movie-info h3 {
+            color: #fff;
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+        }
+        
         .detail-row {
             display: flex;
             justify-content: space-between;
-            margin: 10px 0;
-            padding: 10px 0;
-            border-bottom: 1px solid #333;
+            margin: 12px 0;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(229, 9, 20, 0.1);
+            color: var(--text-secondary);
         }
+        
+        .detail-row span:last-child {
+            color: var(--red);
+            font-weight: 600;
+        }
+        
+        /* Family Select */
+        .family-select {
+            margin-top: 20px;
+        }
+        
+        .family-select label {
+            color: var(--red);
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.8rem;
+        }
+        
+        .family-select select {
+            width: 100%;
+            padding: 12px 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            color: var(--text-primary);
+            border-radius: 40px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .family-select select:focus {
+            border-color: var(--red);
+            outline: none;
+            box-shadow: 0 0 20px rgba(229, 9, 20, 0.2);
+        }
+        
+        /* Seat Map Container */
         .seat-map-container {
-            background: #1a1a1a;
-            border: 2px solid #00ffff;
-            border-radius: 8px;
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 24px;
             padding: 30px;
+            position: relative;
+            overflow: hidden;
         }
+        
+        .seat-map-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            animation: slideBorder 3s infinite;
+        }
+        
+        .seat-map-container h2 {
+            color: var(--red);
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+        }
+        
         .screen {
-            background: linear-gradient(90deg, transparent, #00ffff, transparent);
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
             height: 5px;
             width: 80%;
             margin: 0 auto 40px;
             text-align: center;
             padding-top: 15px;
-            color: #888;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 5px;
         }
+        
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin: 20px 0 30px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+        }
+        
+        .legend-box {
+            width: 20px;
+            height: 20px;
+            border: 2px solid;
+            border-radius: 4px;
+        }
+        
+        .legend-box.available { border-color: rgba(255, 255, 255, 0.2); }
+        .legend-box.selected { background: var(--red); border-color: var(--red); }
+        .legend-box.booked { background: rgba(255, 255, 255, 0.1); border-color: transparent; }
+        
         .seat-map {
             display: grid;
             grid-template-columns: repeat(8, 1fr);
@@ -106,114 +395,218 @@ if ($user['parent_id']) {
             max-width: 500px;
             margin: 0 auto;
         }
+        
         .seat {
             aspect-ratio: 1;
-            border: 2px solid #333;
-            border-radius: 4px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             font-size: 11px;
+            font-weight: 600;
             transition: all 0.3s;
-            background: #000;
-            color: #888;
+            background: transparent;
+            color: var(--text-secondary);
         }
+        
         .seat.available:hover {
-            border-color: #00ffff;
-            color: #00ffff;
+            border-color: var(--red);
+            color: var(--red);
             transform: scale(1.1);
+            box-shadow: 0 0 20px rgba(229, 9, 20, 0.3);
         }
+        
         .seat.selected {
-            background: #00ffff;
-            border-color: #00ffff;
-            color: #000;
+            background: var(--red);
+            border-color: var(--red);
+            color: #fff;
+            transform: scale(1.05);
         }
+        
         .seat.booked {
-            background: #333;
-            border-color: #444;
-            color: #666;
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.2);
             cursor: not-allowed;
+            text-decoration: line-through;
         }
-        .legend {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            margin: 20px 0;
+        
+        /* Form Elements */
+        .form-group {
+            margin: 25px 0;
         }
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            color: #888;
+        
+        .form-group label {
+            color: var(--red);
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.8rem;
         }
-        .legend-box {
-            width: 20px;
-            height: 20px;
-            border: 2px solid;
-            border-radius: 4px;
+        
+        .form-group select {
+            width: 100%;
+            padding: 14px 18px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            color: var(--text-primary);
+            border-radius: 40px;
+            transition: all 0.3s;
+            cursor: pointer;
         }
-        .legend-box.available { border-color: #333; }
-        .legend-box.selected { background: #00ffff; border-color: #00ffff; }
-        .legend-box.booked { background: #333; border-color: #444; }
+        
+        .form-group select:focus {
+            border-color: var(--red);
+            outline: none;
+            box-shadow: 0 0 20px rgba(229, 9, 20, 0.2);
+        }
+        
         .selected-info {
             text-align: center;
             margin: 20px 0;
-            padding: 10px;
-            background: #000;
-            border: 1px solid #00ffff;
-            border-radius: 4px;
-            color: #00ffff;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 40px;
+            color: var(--red);
+            font-weight: 600;
         }
-        .form-group {
+        
+        .selected-info span {
+            color: #fff;
+        }
+        
+        .price-summary {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 16px;
+            padding: 20px;
             margin: 20px 0;
         }
-        .form-group select {
-            width: 100%;
-            padding: 12px;
-            background: #000;
-            border: 1px solid #00ffff;
-            color: #fff;
-            border-radius: 4px;
+        
+        .price-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            color: var(--text-secondary);
         }
+        
+        .price-row span:last-child {
+            color: var(--red);
+            font-weight: 600;
+        }
+        
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px solid var(--red);
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+        
+        .total-row span:last-child {
+            color: var(--red);
+        }
+        
         .proceed-btn {
             width: 100%;
-            padding: 15px;
-            background: #00ffff;
-            color: #000;
+            padding: 16px;
+            background: var(--red);
+            color: #fff;
             border: none;
-            border-radius: 4px;
+            border-radius: 40px;
             font-size: 1.2rem;
-            font-weight: bold;
+            font-weight: 700;
             cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 2px;
         }
+        
+        .proceed-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+        
         .proceed-btn:hover:not(:disabled) {
-            box-shadow: 0 0 30px #00ffff;
+            background: var(--red-dark);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.4);
         }
+        
+        .proceed-btn:hover:not(:disabled)::before {
+            left: 100%;
+        }
+        
         .proceed-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
-        .price-summary {
-            background: #000;
-            padding: 15px;
-            border-radius: 4px;
-            margin: 20px 0;
-        }
+        
+        /* Parent Notice */
         .parent-notice {
-            background: rgba(255, 255, 68, 0.1);
-            border: 1px solid #ffff44;
-            color: #ffff44;
-            padding: 15px;
-            border-radius: 8px;
+            background: rgba(229, 9, 20, 0.1);
+            border: 1px solid var(--red);
+            color: var(--text-primary);
+            padding: 15px 20px;
+            border-radius: 40px;
             margin-bottom: 20px;
+            border-left: 4px solid var(--red);
+        }
+        
+        /* Cinema Strip Divider */
+        .cinema-strip {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            margin: 20px 0 30px;
+            opacity: 0.3;
+        }
+        
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .selection-container {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .seat-map {
+                grid-template-columns: repeat(4, 1fr);
+            }
+            
+            .legend {
+                flex-direction: column;
+                align-items: center;
+            }
         }
     </style>
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-container">
-            <a href="../index.php" class="logo">🎬 CinemaTicket</a>
+            <a href="../index.php" class="logo">CINEMA TICKET</a>
             <div class="nav-links">
                 <a href="movies.php">Movies</a>
                 <a href="favorites.php">Favorites</a>
@@ -229,6 +622,9 @@ if ($user['parent_id']) {
     <main class="container">
         <h1>Select Your Seats</h1>
         
+        <!-- Cinema Strip Divider -->
+        <div class="cinema-strip"></div>
+        
         <!-- Parent notice for kids/teens -->
         <?php if ($user['account_type'] == 'kid' || $user['account_type'] == 'teen'): ?>
             <?php if ($parent): ?>
@@ -242,11 +638,17 @@ if ($user['parent_id']) {
         <div class="selection-container">
             <!-- Left: Movie Info -->
             <div class="movie-info">
-                <h2 style="color:#00ffff; margin-bottom:20px;">Movie Details</h2>
+                <h2>Movie Details</h2>
                 
-                <img src="../uploads/posters/<?php echo $screening['poster']; ?>" class="movie-poster">
+                <?php if ($screening['poster']): ?>
+                    <img src="../uploads/posters/<?php echo $screening['poster']; ?>" class="movie-poster">
+                <?php else: ?>
+                    <div style="width:200px; height:300px; background:var(--deep-gray); border:2px solid rgba(229,9,20,0.3); border-radius:12px; display:flex; align-items:center; justify-content:center; color:var(--text-secondary); margin-bottom:20px;">
+                        No Poster
+                    </div>
+                <?php endif; ?>
                 
-                <h3 style="color:#fff; margin-bottom:10px;"><?php echo htmlspecialchars($screening['title']); ?></h3>
+                <h3><?php echo htmlspecialchars($screening['title']); ?></h3>
                 
                 <div class="detail-row">
                     <span>Cinema:</span>
@@ -258,7 +660,7 @@ if ($user['parent_id']) {
                 </div>
                 <div class="detail-row">
                     <span>Screen:</span>
-                    <span><?php echo $screening['screen_number']; ?></span>
+                    <span>Screen <?php echo $screening['screen_number']; ?></span>
                 </div>
                 <div class="detail-row">
                     <span>Date:</span>
@@ -275,9 +677,9 @@ if ($user['parent_id']) {
                 
                 <!-- Family purchase option (for adults) -->
                 <?php if (!empty($linked_accounts) && $user['account_type'] == 'adult'): ?>
-                    <div style="margin-top: 20px;">
-                        <label style="color:#00ffff; display:block; margin-bottom:10px;">Purchase for:</label>
-                        <select id="forUserId" style="width:100%; padding:10px; background:#000; color:#fff; border:1px solid #00ffff; border-radius:4px;">
+                    <div class="family-select">
+                        <label>Purchase for:</label>
+                        <select id="forUserId">
                             <option value="<?php echo $user['id']; ?>">Myself</option>
                             <?php foreach ($linked_accounts as $account): ?>
                                 <option value="<?php echo $account['id']; ?>">
@@ -291,14 +693,23 @@ if ($user['parent_id']) {
             
             <!-- Right: Seat Selection -->
             <div class="seat-map-container">
-                <h2 style="color:#00ffff; margin-bottom:20px;">Choose Your Seats</h2>
+                <h2>Choose Your Seats</h2>
                 
                 <div class="screen">SCREEN</div>
                 
                 <div class="legend">
-                    <div class="legend-item"><div class="legend-box available"></div> Available</div>
-                    <div class="legend-item"><div class="legend-box selected"></div> Selected</div>
-                    <div class="legend-item"><div class="legend-box booked"></div> Booked</div>
+                    <div class="legend-item">
+                        <div class="legend-box available"></div>
+                        <span>Available</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-box selected"></div>
+                        <span>Selected</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-box booked"></div>
+                        <span>Booked</span>
+                    </div>
                 </div>
                 
                 <div class="seat-map" id="seatMap">
@@ -315,26 +726,28 @@ if ($user['parent_id']) {
                 </div>
                 
                 <div class="form-group">
-                    <label style="color:#00ffff;">Number of Tickets</label>
+                    <label>Number of Tickets</label>
                     <select id="quantity" onchange="updateQuantity()">
                         <?php for ($i = 1; $i <= min(10, $screening['available_seats']); $i++): ?>
-                            <option value="<?php echo $i; ?>"><?php echo $i; ?> Ticket(s)</option>
+                            <option value="<?php echo $i; ?>"><?php echo $i; ?> Ticket<?php echo $i > 1 ? 's' : ''; ?></option>
                         <?php endfor; ?>
                     </select>
                 </div>
                 
-                <div class="selected-info" id="selectedSeats">Selected: None</div>
+                <div class="selected-info" id="selectedSeats">
+                    Selected: <span>None</span>
+                </div>
                 
                 <div class="price-summary">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                    <div class="price-row">
                         <span>Subtotal:</span>
                         <span id="subtotal">$0.00</span>
                     </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                    <div class="price-row">
                         <span>Processing Fee (₱150 each):</span>
                         <span id="fee">$0.00</span>
                     </div>
-                    <div style="display:flex; justify-content:space-between; font-size:1.2rem; color:#00ffff; font-weight:bold;">
+                    <div class="total-row">
                         <span>TOTAL:</span>
                         <span id="total">$0.00</span>
                     </div>
@@ -376,10 +789,11 @@ if ($user['parent_id']) {
         }
         
         function updateSelectedSeats() {
+            const display = document.getElementById('selectedSeats');
             if (selectedSeats.length === 0) {
-                document.getElementById('selectedSeats').textContent = 'Selected: None';
+                display.innerHTML = 'Selected: <span>None</span>';
             } else {
-                document.getElementById('selectedSeats').textContent = 'Selected: ' + selectedSeats.join(', ');
+                display.innerHTML = 'Selected: <span>' + selectedSeats.join(', ') + '</span>';
             }
             document.getElementById('selectedSeatsInput').value = selectedSeats.join(',');
         }

@@ -74,138 +74,425 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Verify Ticket - Staff</title>
     <link rel="stylesheet" href="../assets/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --black: #0a0a0a;
+            --deep-gray: #1a1a1a;
+            --medium-gray: #2a2a2a;
+            --light-gray: #333333;
+            --red: #e50914;
+            --red-dark: #b2070f;
+            --red-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #b3b3b3;
+            --glass-bg: rgba(26, 26, 26, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.05);
+            --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: var(--black);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-weight: 400;
+            line-height: 1.6;
+            min-height: 100vh;
+            position: relative;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 20% 50%, rgba(229, 9, 20, 0.03) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, rgba(229, 9, 20, 0.03) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        /* Navigation */
+        .navbar {
+            background: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 30px;
+        }
+        
+        .logo {
+            color: var(--red);
+            font-size: 1.8rem;
+            font-weight: 800;
+            font-family: 'Montserrat', sans-serif;
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            position: relative;
+            transition: all 0.3s;
+        }
+        
+        .logo:hover {
+            text-shadow: var(--red-glow);
+        }
+        
+        .logo::before {
+            content: "🎬";
+            margin-right: 10px;
+            font-size: 1.5rem;
+            filter: drop-shadow(0 0 5px var(--red));
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 25px;
+            align-items: center;
+        }
+        
+        .nav-links a {
+            color: var(--text-primary);
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: all 0.3s;
+            font-weight: 500;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+        }
+        
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 2px;
+            background: var(--red);
+            transition: width 0.3s;
+        }
+        
+        .nav-links a:hover {
+            color: var(--red);
+        }
+        
+        .nav-links a:hover::after {
+            width: 60%;
+        }
+        
+        .nav-links a.active {
+            color: var(--red);
+        }
+        
+        .nav-links a.active::after {
+            width: 60%;
+        }
+        
+        /* Main Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0 0 30px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
         .verify-container {
             max-width: 600px;
             margin: 0 auto;
         }
+        
+        /* Verify Form */
         .verify-form {
-            background: #1a1a1a;
-            border: 2px solid #00ffff;
-            border-radius: 8px;
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 24px;
             padding: 30px;
             margin-bottom: 30px;
+            position: relative;
+            overflow: hidden;
         }
+        
+        .verify-form::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            animation: slideBorder 3s infinite;
+        }
+        
+        @keyframes slideBorder {
+            0% { transform: translateX(-100%); }
+            50% { transform: translateX(100%); }
+            100% { transform: translateX(100%); }
+        }
+        
         .verify-form h2 {
-            color: #00ffff;
+            color: var(--red);
             margin-bottom: 20px;
+            font-size: 1.5rem;
         }
+        
         .input-group {
             display: flex;
             gap: 10px;
         }
+        
         .input-group input {
             flex: 1;
-            padding: 15px;
-            background: #000;
-            border: 1px solid #333;
-            color: #fff;
-            border-radius: 4px;
+            padding: 16px 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            color: var(--text-primary);
+            border-radius: 40px;
             font-size: 1.1rem;
-            font-family: monospace;
+            font-family: 'Monaco', monospace;
+            transition: all 0.3s;
         }
+        
         .input-group input:focus {
-            border-color: #00ffff;
+            border-color: var(--red);
             outline: none;
+            box-shadow: 0 0 20px rgba(229, 9, 20, 0.2);
         }
+        
         .input-group button {
-            padding: 15px 30px;
-            background: #00ffff;
-            color: #000;
+            padding: 16px 35px;
+            background: var(--red);
+            color: #fff;
             border: none;
-            border-radius: 4px;
-            font-weight: bold;
+            border-radius: 40px;
+            font-weight: 600;
             cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
+        
         .input-group button:hover {
-            box-shadow: 0 0 20px #00ffff;
+            background: var(--red-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
         }
-        .result-card {
-            background: #1a1a1a;
-            border: 2px solid;
-            border-radius: 8px;
-            padding: 30px;
+        
+        .manual-entry {
+            margin-top: 20px;
             text-align: center;
         }
-        .result-valid {
-            border-color: #44ff44;
+        
+        .manual-entry a {
+            color: var(--red);
+            text-decoration: none;
+            transition: all 0.3s;
+            position: relative;
+            padding-bottom: 2px;
         }
-        .result-invalid {
-            border-color: #ff4444;
+        
+        .manual-entry a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--red);
+            transition: width 0.3s;
         }
-        .result-warning {
-            border-color: #ffff44;
+        
+        .manual-entry a:hover {
+            text-shadow: 0 0 8px var(--red);
         }
-        .result-icon {
-            font-size: 4rem;
-            margin-bottom: 20px;
+        
+        .manual-entry a:hover::after {
+            width: 100%;
         }
-        .result-title {
-            font-size: 2rem;
-            font-weight: bold;
-            margin-bottom: 20px;
+        
+        /* Result Card */
+        .result-card {
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 2px solid;
+            border-radius: 24px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 30px;
+            position: relative;
+            overflow: hidden;
         }
+        
+        .result-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            animation: slideBorder 3s infinite;
+        }
+        
+        .result-valid { border-color: #44ff44; }
+        .result-invalid { border-color: #ff4444; }
+        .result-warning { border-color: #ffff44; }
+        
+        .result-icon { font-size: 4rem; margin-bottom: 20px; }
+        .result-title { font-size: 2rem; font-weight: bold; margin-bottom: 20px; }
+        
         .ticket-details {
             margin-top: 30px;
-            padding: 20px;
-            background: #000;
-            border-radius: 8px;
+            padding: 25px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 16px;
             text-align: left;
         }
+        
+        .ticket-details h3 {
+            color: var(--red);
+            margin-bottom: 15px;
+        }
+        
         .detail-row {
             display: flex;
-            padding: 10px 0;
-            border-bottom: 1px solid #333;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(229, 9, 20, 0.1);
         }
+        
         .detail-label {
             width: 120px;
-            color: #888;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
         }
+        
         .detail-value {
             flex: 1;
             color: #fff;
+            font-weight: 500;
         }
+        
         .detail-value.highlight {
-            color: #00ffff;
-            font-weight: bold;
+            color: var(--red);
+            font-weight: 600;
         }
+        
+        /* Quick Guide */
         .quick-guide {
-            margin-top: 30px;
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 16px;
             padding: 20px;
-            background: #1a1a1a;
-            border: 1px solid #00ffff;
-            border-radius: 8px;
         }
+        
+        .quick-guide h3 {
+            color: var(--red);
+            margin-bottom: 15px;
+        }
+        
         .guide-item {
             display: flex;
             align-items: center;
             gap: 15px;
             padding: 10px;
-            border-bottom: 1px solid #333;
+            border-bottom: 1px solid rgba(229, 9, 20, 0.1);
         }
+        
         .guide-item:last-child {
             border-bottom: none;
         }
+        
         .guide-icon {
             font-size: 1.5rem;
         }
-        .manual-entry {
-            margin-top: 20px;
-            text-align: center;
+        
+        .guide-item span:last-child {
+            color: var(--text-secondary);
         }
-        .manual-entry a {
-            color: #00ffff;
-            text-decoration: none;
+        
+        .guide-item strong {
+            color: var(--red);
         }
-        .manual-entry a:hover {
-            text-decoration: underline;
+        
+        /* Cinema Strip Divider */
+        .cinema-strip {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            margin: 20px 0 30px;
+            opacity: 0.3;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .input-group {
+                flex-direction: column;
+            }
+            
+            .input-group button {
+                width: 100%;
+            }
+            
+            .detail-row {
+                flex-direction: column;
+                gap: 5px;
+            }
+            
+            .detail-label {
+                width: auto;
+            }
         }
     </style>
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-container">
-            <a href="../index.php" class="logo">🎬 CinemaTicket Staff</a>
+            <a href="../index.php" class="logo">CINEMA TICKET STAFF</a>
             <div class="nav-links">
                 <a href="dashboard.php">Dashboard</a>
                 <a href="cinemas.php">Cinemas</a>
@@ -222,6 +509,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <main class="container">
         <div class="verify-container">
             <h1>Verify Ticket</h1>
+            
+            <!-- Cinema Strip Divider -->
+            <div class="cinema-strip"></div>
             
             <div class="verify-form">
                 <h2>Manual Entry</h2>
@@ -247,10 +537,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <?php if ($result == 'valid'): ?>
                         <div class="result-icon">✅</div>
                         <div class="result-title" style="color: #44ff44;">VALID TICKET</div>
-                        <p>Welcome to the cinema! Ticket has been marked as used.</p>
+                        <p style="color: var(--text-secondary);">Welcome to the cinema! Ticket has been marked as used.</p>
                         
                         <div class="ticket-details">
-                            <h3 style="color: #00ffff; margin-bottom: 15px;">Ticket Details</h3>
+                            <h3>Ticket Details</h3>
                             <div class="detail-row">
                                 <span class="detail-label">Ticket Code:</span>
                                 <span class="detail-value highlight"><?php echo $ticket_info['ticket_code']; ?></span>
@@ -284,23 +574,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <?php elseif ($result == 'used'): ?>
                         <div class="result-icon">⚠️</div>
                         <div class="result-title" style="color: #ffff44;">TICKET ALREADY USED</div>
-                        <p>This ticket was used on <?php echo date('M d, Y h:i A', strtotime($ticket_info['used_at'])); ?></p>
+                        <p style="color: var(--text-secondary);">This ticket was used on <?php echo date('M d, Y h:i A', strtotime($ticket_info['used_at'])); ?></p>
                         
                     <?php elseif ($result == 'expired'): ?>
                         <div class="result-icon">⌛</div>
                         <div class="result-title" style="color: #ffff44;">TICKET EXPIRED</div>
-                        <p>This ticket expired on <?php echo date('M d, Y h:i A', strtotime($ticket_info['expiry_date'])); ?></p>
+                        <p style="color: var(--text-secondary);">This ticket expired on <?php echo date('M d, Y h:i A', strtotime($ticket_info['expiry_date'])); ?></p>
                         
                     <?php elseif ($result == 'not_paid'): ?>
                         <div class="result-icon">💰</div>
                         <div class="result-title" style="color: #ff4444;">PAYMENT PENDING</div>
-                        <p>This ticket has not been paid for yet.</p>
+                        <p style="color: var(--text-secondary);">This ticket has not been paid for yet.</p>
                         
                     <?php elseif ($result == 'wrong_cinema'): ?>
                         <div class="result-icon">🏛️</div>
                         <div class="result-title" style="color: #ff4444;">WRONG CINEMA</div>
-                        <p>This ticket is for a different cinema location.</p>
-                        <p>Ticket cinema: <?php echo htmlspecialchars($ticket_info['cinema_name']); ?></p>
+                        <p style="color: var(--text-secondary);">This ticket is for a different cinema location.</p>
+                        <p style="color: var(--red); margin-top:10px;">Ticket cinema: <?php echo htmlspecialchars($ticket_info['cinema_name']); ?></p>
                         
                     <?php endif; ?>
                 </div>
@@ -309,23 +599,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <div class="result-card result-invalid">
                     <div class="result-icon">❌</div>
                     <div class="result-title" style="color: #ff4444;">INVALID TICKET</div>
-                    <p>The ticket code you entered was not found in our system.</p>
+                    <p style="color: var(--text-secondary);">The ticket code you entered was not found in our system.</p>
                 </div>
             <?php endif; ?>
             
             <div class="quick-guide">
-                <h3 style="color: #00ffff; margin-bottom: 15px;">Quick Guide</h3>
+                <h3>Quick Guide</h3>
                 <div class="guide-item">
                     <span class="guide-icon">✅</span>
-                    <span><strong>Valid</strong> - Green screen, allow entry</span>
+                    <span><strong>Valid</strong> - Green border, allow entry</span>
                 </div>
                 <div class="guide-item">
                     <span class="guide-icon">⚠️</span>
-                    <span><strong>Used/Expired</strong> - Yellow screen, deny entry</span>
+                    <span><strong>Used/Expired</strong> - Yellow border, deny entry</span>
                 </div>
                 <div class="guide-item">
                     <span class="guide-icon">❌</span>
-                    <span><strong>Invalid/Not Paid</strong> - Red screen, deny entry</span>
+                    <span><strong>Invalid/Not Paid</strong> - Red border, deny entry</span>
                 </div>
                 <div class="guide-item">
                     <span class="guide-icon">🏛️</span>

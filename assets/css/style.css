@@ -1,17 +1,19 @@
-/* assets/css/style.css - Black/White/Neon Blue Theme */
+/* assets/css/style.css - Black/Orange Movie Website Theme */
 :root {
-    --bg-primary: #000000;
-    --bg-secondary: #111111;
-    --bg-card: #1a1a1a;
+    --bg-primary: #0a0a0a;
+    --bg-secondary: #1a1a1a;
+    --bg-card: #222222;
     --text-primary: #ffffff;
-    --text-secondary: #cccccc;
-    --neon-blue: #00ffff;
-    --neon-blue-glow: 0 0 10px #00ffff, 0 0 20px #00ffff, 0 0 30px #00ffff;
-    --neon-blue-border: 1px solid #00ffff;
-    --neon-blue-box: 0 0 5px #00ffff;
+    --text-secondary: #e0e0e0;
+    --orange-primary: #ff6b00;
+    --orange-secondary: #ff4500;
+    --orange-glow: 0 0 10px #ff6b00, 0 0 20px #ff6b00, 0 0 30px rgba(255, 107, 0, 0.5);
+    --orange-border: 1px solid #ff6b00;
+    --orange-box: 0 0 5px #ff6b00;
     --error-red: #ff4444;
     --success-green: #44ff44;
     --warning-yellow: #ffff44;
+    --film-strip: repeating-linear-gradient(45deg, #ff6b00 0px, #ff6b00 5px, transparent 5px, transparent 10px);
 }
 
 * {
@@ -21,11 +23,12 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Montserrat', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: var(--bg-primary);
     color: var(--text-primary);
     line-height: 1.6;
     min-height: 100vh;
+    background-image: radial-gradient(circle at 10% 20%, rgba(255, 107, 0, 0.03) 0%, transparent 20%);
 }
 
 /* Container */
@@ -35,15 +38,15 @@ body {
     padding: 20px;
 }
 
-/* Navigation */
+/* Navigation - Movie Theater Style */
 .navbar {
-    background: var(--bg-secondary);
-    border-bottom: 2px solid var(--neon-blue);
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+    border-bottom: 3px solid var(--orange-primary);
     padding: 1rem 0;
     position: sticky;
     top: 0;
     z-index: 1000;
-    box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+    box-shadow: 0 5px 20px rgba(255, 107, 0, 0.2);
 }
 
 .nav-container {
@@ -56,11 +59,20 @@ body {
 }
 
 .logo {
-    color: var(--neon-blue);
-    font-size: 1.8rem;
-    font-weight: bold;
+    color: var(--orange-primary);
+    font-size: 2rem;
+    font-weight: 800;
     text-decoration: none;
-    text-shadow: var(--neon-blue-glow);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    text-shadow: var(--orange-glow);
+    position: relative;
+}
+
+.logo::before {
+    content: "🎬";
+    margin-right: 10px;
+    font-size: 1.8rem;
 }
 
 .nav-links {
@@ -72,43 +84,72 @@ body {
 .nav-links a {
     color: var(--text-primary);
     text-decoration: none;
-    padding: 8px 12px;
+    padding: 8px 16px;
     border-radius: 4px;
     transition: all 0.3s;
-    border: 1px solid transparent;
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+    position: relative;
+    overflow: hidden;
+}
+
+.nav-links a::before {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: -100%;
+    width: 100%;
+    height: 2px;
+    background: var(--orange-primary);
+    transition: left 0.3s;
 }
 
 .nav-links a:hover {
-    color: var(--neon-blue);
-    border: var(--neon-blue-border);
-    box-shadow: var(--neon-blue-box);
+    color: var(--orange-primary);
 }
 
-/* Alerts */
+.nav-links a:hover::before {
+    left: 0;
+}
+
+/* Alerts - Film Strip Style */
 .alert {
     padding: 15px 20px;
     margin-bottom: 20px;
     border-radius: 4px;
     animation: slideIn 0.3s ease;
     border-left: 4px solid;
+    background: var(--bg-card);
+    position: relative;
+    overflow: hidden;
+}
+
+.alert::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 50px;
+    height: 100%;
+    background: var(--film-strip);
+    opacity: 0.3;
 }
 
 .alert-success {
-    background: rgba(68, 255, 68, 0.1);
     border-left-color: var(--success-green);
     color: var(--success-green);
 }
 
 .alert-error {
-    background: rgba(255, 68, 68, 0.1);
     border-left-color: var(--error-red);
     color: var(--error-red);
 }
 
 .alert-info {
-    background: rgba(0, 255, 255, 0.1);
-    border-left-color: var(--neon-blue);
-    color: var(--neon-blue);
+    border-left-color: var(--orange-primary);
+    color: var(--orange-primary);
 }
 
 @keyframes slideIn {
@@ -122,22 +163,39 @@ body {
     }
 }
 
-/* Forms */
+/* Forms - Cinema Ticket Style */
 .form-container {
     max-width: 600px;
     margin: 40px auto;
     padding: 30px;
     background: var(--bg-card);
     border-radius: 8px;
-    border: var(--neon-blue-border);
-    box-shadow: var(--neon-blue-box);
+    border: var(--orange-border);
+    box-shadow: var(--orange-box);
+    position: relative;
+}
+
+.form-container::before {
+    content: '';
+    position: absolute;
+    top: -5px;
+    left: -5px;
+    right: -5px;
+    bottom: -5px;
+    background: linear-gradient(45deg, var(--orange-primary), transparent);
+    border-radius: 12px;
+    z-index: -1;
+    opacity: 0.3;
 }
 
 .form-container h1 {
-    color: var(--neon-blue);
+    color: var(--orange-primary);
     margin-bottom: 30px;
     text-align: center;
-    text-shadow: var(--neon-blue-glow);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: 700;
+    text-shadow: var(--orange-glow);
 }
 
 .form-group {
@@ -148,7 +206,10 @@ body {
     display: block;
     margin-bottom: 5px;
     color: var(--text-secondary);
-    font-weight: bold;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 1px;
 }
 
 .form-group input,
@@ -157,7 +218,7 @@ body {
     width: 100%;
     padding: 12px;
     background: var(--bg-primary);
-    border: 1px solid #333;
+    border: 2px solid #333;
     border-radius: 4px;
     color: var(--text-primary);
     font-size: 16px;
@@ -168,8 +229,8 @@ body {
 .form-group select:focus,
 .form-group textarea:focus {
     outline: none;
-    border-color: var(--neon-blue);
-    box-shadow: var(--neon-blue-box);
+    border-color: var(--orange-primary);
+    box-shadow: var(--orange-box);
 }
 
 .form-group input.invalid {
@@ -193,38 +254,64 @@ body {
     margin-top: 5px;
 }
 
-/* Buttons */
+/* Buttons - Movie Ticket Style */
 .btn {
     display: inline-block;
-    padding: 12px 24px;
+    padding: 12px 30px;
     border: none;
     border-radius: 4px;
     font-size: 16px;
-    font-weight: bold;
+    font-weight: 600;
     cursor: pointer;
     text-decoration: none;
     transition: all 0.3s;
     background: transparent;
-    color: var(--neon-blue);
-    border: var(--neon-blue-border);
+    color: var(--orange-primary);
+    border: 2px solid var(--orange-primary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+}
+
+.btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: var(--orange-primary);
+    transition: left 0.3s;
+    z-index: -1;
 }
 
 .btn:hover {
-    background: var(--neon-blue);
     color: var(--bg-primary);
-    box-shadow: var(--neon-blue-glow);
+}
+
+.btn:hover::before {
+    left: 0;
+}
+
+.btn:hover {
+    box-shadow: var(--orange-glow);
 }
 
 .btn-primary {
-    background: var(--neon-blue);
+    background: var(--orange-primary);
     color: var(--bg-primary);
-    border: var(--neon-blue-border);
+    border: 2px solid var(--orange-primary);
+}
+
+.btn-primary::before {
+    background: transparent;
 }
 
 .btn-primary:hover {
     background: transparent;
-    color: var(--neon-blue);
-    box-shadow: var(--neon-blue-glow);
+    color: var(--orange-primary);
 }
 
 .btn-block {
@@ -232,15 +319,15 @@ body {
 }
 
 .btn-small {
-    padding: 6px 12px;
+    padding: 6px 16px;
     font-size: 14px;
 }
 
-/* Movie Grid */
+/* Movie Grid - Movie Poster Style */
 .movies-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 25px;
+    gap: 30px;
     margin-top: 30px;
 }
 
@@ -248,13 +335,25 @@ body {
     background: var(--bg-card);
     border-radius: 8px;
     overflow: hidden;
-    border: var(--neon-blue-border);
+    border: 2px solid #333;
     transition: all 0.3s;
+    position: relative;
+}
+
+.movie-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 5px;
+    background: linear-gradient(90deg, var(--orange-primary), var(--orange-secondary));
 }
 
 .movie-card:hover {
-    transform: translateY(-5px);
-    box-shadow: var(--neon-blue-glow);
+    transform: translateY(-10px) scale(1.02);
+    border-color: var(--orange-primary);
+    box-shadow: var(--orange-glow);
 }
 
 .movie-info {
@@ -262,21 +361,29 @@ body {
 }
 
 .movie-info h3 {
-    color: var(--neon-blue);
+    color: var(--orange-primary);
     margin-bottom: 10px;
+    font-size: 1.5rem;
+    font-weight: 700;
 }
 
 .movie-meta {
     display: flex;
-    gap: 10px;
+    gap: 15px;
     margin: 15px 0;
     color: var(--text-secondary);
     font-size: 14px;
 }
 
+.movie-meta span {
+    background: rgba(255, 107, 0, 0.1);
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
 .price {
-    font-size: 1.3rem;
-    color: var(--neon-blue);
+    font-size: 1.5rem;
+    color: var(--orange-primary);
     font-weight: bold;
     margin: 15px 0;
 }
@@ -293,20 +400,32 @@ body {
     align-items: center;
     padding: 20px;
     background: var(--bg-card);
-    border: var(--neon-blue-border);
+    border: 2px solid #333;
     border-radius: 8px;
     margin-bottom: 15px;
     transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+}
+
+.screening-card::after {
+    content: '🎬';
+    position: absolute;
+    bottom: 5px;
+    right: 10px;
+    opacity: 0.1;
+    font-size: 2rem;
 }
 
 .screening-card:hover {
-    box-shadow: var(--neon-blue-box);
+    border-color: var(--orange-primary);
+    box-shadow: var(--orange-box);
 }
 
 .screening-time {
-    font-size: 1.2rem;
+    font-size: 1.3rem;
     font-weight: bold;
-    color: var(--neon-blue);
+    color: var(--orange-primary);
 }
 
 .seats-left {
@@ -314,23 +433,27 @@ body {
     font-size: 14px;
 }
 
-/* Seat Map */
+/* Seat Map - Theater Style */
 .seat-map-container {
     margin: 30px 0;
     padding: 30px;
-    background: var(--bg-card);
+    background: linear-gradient(135deg, #1a1a1a 0%, #222 100%);
     border-radius: 8px;
-    border: var(--neon-blue-border);
+    border: 2px solid #333;
+    position: relative;
 }
 
 .screen {
-    background: linear-gradient(90deg, transparent, var(--neon-blue), transparent);
+    background: linear-gradient(90deg, transparent, var(--orange-primary), transparent);
     height: 5px;
     width: 80%;
-    margin: 0 auto 40px;
+    margin: 0 auto 50px;
     text-align: center;
     padding-top: 15px;
     color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 5px;
+    font-weight: 600;
 }
 
 .seat-map {
@@ -357,17 +480,18 @@ body {
 }
 
 .seat.available:hover {
-    border-color: var(--neon-blue);
-    color: var(--neon-blue);
-    transform: scale(1.1);
-    box-shadow: var(--neon-blue-box);
+    border-color: var(--orange-primary);
+    color: var(--orange-primary);
+    transform: scale(1.1) rotate(5deg);
+    box-shadow: var(--orange-box);
 }
 
 .seat.selected {
-    background: var(--neon-blue);
-    border-color: var(--neon-blue);
+    background: var(--orange-primary);
+    border-color: var(--orange-primary);
     color: var(--bg-primary);
-    box-shadow: var(--neon-blue-glow);
+    box-shadow: var(--orange-glow);
+    transform: scale(1.05);
 }
 
 .seat.booked {
@@ -376,6 +500,14 @@ body {
     color: #666;
     cursor: not-allowed;
     text-decoration: line-through;
+    position: relative;
+}
+
+.seat.booked::after {
+    content: '🎬';
+    position: absolute;
+    font-size: 8px;
+    opacity: 0.5;
 }
 
 .seat-legend {
@@ -383,6 +515,9 @@ body {
     justify-content: center;
     gap: 30px;
     margin-top: 30px;
+    padding: 20px;
+    background: var(--bg-primary);
+    border-radius: 4px;
 }
 
 .legend-item {
@@ -396,10 +531,11 @@ body {
     width: 20px;
     height: 20px;
     border: 2px solid;
+    border-radius: 4px;
 }
 
 .legend-box.available { border-color: #333; }
-.legend-box.selected { background: var(--neon-blue); border-color: var(--neon-blue); }
+.legend-box.selected { background: var(--orange-primary); border-color: var(--orange-primary); }
 .legend-box.booked { background: #333; border-color: #444; }
 
 .selected-seats {
@@ -408,11 +544,12 @@ body {
     padding: 15px;
     background: var(--bg-primary);
     border-radius: 4px;
-    color: var(--neon-blue);
+    color: var(--orange-primary);
     font-weight: bold;
+    border: 1px dashed var(--orange-primary);
 }
 
-/* Tickets */
+/* Tickets - Movie Ticket Style */
 .tickets-grid {
     display: grid;
     gap: 20px;
@@ -421,24 +558,36 @@ body {
 
 .ticket-card {
     background: var(--bg-card);
-    border: var(--neon-blue-border);
+    border: 2px solid #333;
     border-radius: 8px;
     overflow: hidden;
+    position: relative;
+}
+
+.ticket-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 5px;
+    background: repeating-linear-gradient(90deg, var(--orange-primary) 0px, var(--orange-primary) 10px, transparent 10px, transparent 20px);
 }
 
 .ticket-header {
-    background: var(--bg-primary);
-    padding: 15px;
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+    padding: 15px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid var(--neon-blue);
+    border-bottom: 1px solid #333;
 }
 
 .ticket-code {
-    font-family: monospace;
-    font-size: 1.1rem;
-    color: var(--neon-blue);
+    font-family: 'Courier New', monospace;
+    font-size: 1.2rem;
+    color: var(--orange-primary);
+    font-weight: bold;
 }
 
 .ticket-status {
@@ -446,12 +595,13 @@ body {
     border-radius: 20px;
     font-size: 12px;
     font-weight: bold;
+    text-transform: uppercase;
 }
 
 .status-pending {
-    background: rgba(255, 255, 68, 0.2);
-    color: var(--warning-yellow);
-    border: 1px solid var(--warning-yellow);
+    background: rgba(255, 107, 0, 0.2);
+    color: var(--orange-primary);
+    border: 1px solid var(--orange-primary);
 }
 
 .status-paid {
@@ -461,9 +611,9 @@ body {
 }
 
 .status-used {
-    background: rgba(0, 255, 255, 0.2);
-    color: var(--neon-blue);
-    border: 1px solid var(--neon-blue);
+    background: rgba(255, 107, 0, 0.1);
+    color: var(--orange-secondary);
+    border: 1px solid var(--orange-secondary);
 }
 
 .ticket-body {
@@ -471,10 +621,11 @@ body {
 }
 
 .seat-numbers {
-    color: var(--neon-blue);
+    color: var(--orange-primary);
     font-weight: bold;
-    font-size: 1.2rem;
+    font-size: 1.3rem;
     margin: 10px 0;
+    letter-spacing: 1px;
 }
 
 /* Tables */
@@ -482,18 +633,20 @@ body {
     width: 100%;
     border-collapse: collapse;
     background: var(--bg-card);
-    border: var(--neon-blue-border);
+    border: 2px solid #333;
     border-radius: 8px;
     overflow: hidden;
 }
 
 .data-table th {
-    background: var(--bg-primary);
-    color: var(--neon-blue);
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+    color: var(--orange-primary);
     padding: 15px;
     text-align: left;
-    font-weight: bold;
-    border-bottom: 2px solid var(--neon-blue);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 0.9rem;
 }
 
 .data-table td {
@@ -503,10 +656,10 @@ body {
 }
 
 .data-table tr:hover {
-    background: var(--bg-primary);
+    background: rgba(255, 107, 0, 0.1);
 }
 
-/* Dashboard Stats */
+/* Dashboard Stats - Box Office Style */
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -515,31 +668,46 @@ body {
 }
 
 .stat-card {
-    background: var(--bg-card);
-    border: var(--neon-blue-border);
+    background: linear-gradient(135deg, #1a1a1a 0%, #222 100%);
+    border: 2px solid #333;
     border-radius: 8px;
     padding: 25px;
     text-align: center;
     transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card::before {
+    content: '🎬';
+    position: absolute;
+    bottom: -10px;
+    right: -10px;
+    font-size: 4rem;
+    opacity: 0.1;
+    transform: rotate(-15deg);
 }
 
 .stat-card:hover {
     transform: translateY(-5px);
-    box-shadow: var(--neon-blue-glow);
+    border-color: var(--orange-primary);
+    box-shadow: var(--orange-glow);
 }
 
 .stat-value {
-    font-size: 2.5rem;
-    font-weight: bold;
-    color: var(--neon-blue);
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--orange-primary);
     margin-bottom: 10px;
+    text-shadow: var(--orange-glow);
 }
 
 .stat-label {
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 2px;
     font-size: 14px;
+    font-weight: 500;
 }
 
 /* Responsive */
@@ -562,13 +730,13 @@ body {
     }
 }
 
-/* Loading Animation */
+/* Loading Animation - Film Reel Style */
 .loading {
     display: inline-block;
-    width: 20px;
-    height: 20px;
-    border: 2px solid var(--neon-blue);
-    border-top-color: transparent;
+    width: 30px;
+    height: 30px;
+    border: 3px solid rgba(255, 107, 0, 0.3);
+    border-top-color: var(--orange-primary);
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
@@ -579,19 +747,63 @@ body {
 
 /* Neon Text */
 .neon-text {
-    color: var(--neon-blue);
-    text-shadow: var(--neon-blue-glow);
+    color: var(--orange-primary);
+    text-shadow: var(--orange-glow);
+    font-weight: 700;
+    letter-spacing: 2px;
 }
 
-/* Error Pages */
+/* Error Pages - Movie Poster Style */
 .error-page {
     text-align: center;
     padding: 100px 20px;
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
 }
 
 .error-code {
-    font-size: 6rem;
-    color: var(--neon-blue);
-    text-shadow: var(--neon-blue-glow);
+    font-size: 8rem;
+    color: var(--orange-primary);
+    text-shadow: var(--orange-glow);
     margin-bottom: 20px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.error-page h1 {
+    color: var(--text-primary);
+    font-size: 2rem;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+}
+
+.error-page p {
+    color: var(--text-secondary);
+    margin-bottom: 30px;
+    font-size: 1.2rem;
+}
+
+/* Movie Rating Badges */
+.rating-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    background: var(--orange-primary);
+    color: var(--bg-primary);
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 0.8rem;
+    margin-right: 8px;
+}
+
+/* Cinema Strip Divider */
+.cinema-strip {
+    height: 20px;
+    background: repeating-linear-gradient(90deg, var(--orange-primary) 0px, var(--orange-primary) 10px, transparent 10px, transparent 20px);
+    margin: 30px 0;
+    opacity: 0.3;
 }

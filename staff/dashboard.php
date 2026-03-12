@@ -78,7 +78,151 @@ $pending_verifications = $pending['pending'] ?? 0;
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Staff Dashboard - CinemaTicket</title>
     <link rel="stylesheet" href="../assets/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --black: #0a0a0a;
+            --deep-gray: #1a1a1a;
+            --medium-gray: #2a2a2a;
+            --light-gray: #333333;
+            --red: #e50914;
+            --red-dark: #b2070f;
+            --red-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #b3b3b3;
+            --glass-bg: rgba(26, 26, 26, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.05);
+            --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: var(--black);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-weight: 400;
+            line-height: 1.6;
+            min-height: 100vh;
+            position: relative;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 20% 50%, rgba(229, 9, 20, 0.03) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, rgba(229, 9, 20, 0.03) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        /* Navigation */
+        .navbar {
+            background: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 30px;
+        }
+        
+        .logo {
+            color: var(--red);
+            font-size: 1.8rem;
+            font-weight: 800;
+            font-family: 'Montserrat', sans-serif;
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            position: relative;
+            transition: all 0.3s;
+        }
+        
+        .logo:hover {
+            text-shadow: var(--red-glow);
+        }
+        
+        .logo::before {
+            content: "🎬";
+            margin-right: 10px;
+            font-size: 1.5rem;
+            filter: drop-shadow(0 0 5px var(--red));
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 25px;
+            align-items: center;
+        }
+        
+        .nav-links a {
+            color: var(--text-primary);
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: all 0.3s;
+            font-weight: 500;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+        }
+        
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 2px;
+            background: var(--red);
+            transition: width 0.3s;
+        }
+        
+        .nav-links a:hover {
+            color: var(--red);
+        }
+        
+        .nav-links a:hover::after {
+            width: 60%;
+        }
+        
+        .nav-links a.active {
+            color: var(--red);
+        }
+        
+        .nav-links a.active::after {
+            width: 60%;
+        }
+        
+        /* Main Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px;
+        }
+        
+        /* Header */
         .staff-header {
             display: flex;
             justify-content: space-between;
@@ -87,175 +231,376 @@ $pending_verifications = $pending['pending'] ?? 0;
             flex-wrap: wrap;
             gap: 20px;
         }
-        .cinema-badge {
-            background: #00ffff;
-            color: #000;
-            padding: 10px 20px;
-            border-radius: 30px;
-            font-weight: bold;
-            font-size: 1.1rem;
+        
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
         }
+        
+        .cinema-badge {
+            background: var(--red);
+            color: #fff;
+            padding: 12px 25px;
+            border-radius: 40px;
+            font-weight: 600;
+            font-size: 1rem;
+            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
+            letter-spacing: 1px;
+        }
+        
+        /* Pending Alert */
+        .pending-badge {
+            background: rgba(229, 9, 20, 0.1);
+            border: 1px solid var(--red);
+            color: var(--text-primary);
+            padding: 15px 25px;
+            border-radius: 40px;
+            margin-bottom: 25px;
+            border-left: 4px solid var(--red);
+            font-weight: 500;
+        }
+        
+        /* Stats Grid */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 25px;
             margin: 30px 0;
         }
+        
         .stat-card {
-            background: #1a1a1a;
-            border: 2px solid #00ffff;
-            border-radius: 8px;
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.1);
+            border-radius: 24px;
             padding: 25px;
             display: flex;
             gap: 20px;
             align-items: center;
             transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
         }
+        
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            transform: translateX(-100%);
+            animation: slideBorder 3s infinite;
+        }
+        
+        @keyframes slideBorder {
+            0% { transform: translateX(-100%); }
+            50% { transform: translateX(100%); }
+            100% { transform: translateX(100%); }
+        }
+        
         .stat-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 0 30px rgba(0,255,255,0.3);
+            border-color: rgba(229, 9, 20, 0.3);
+            box-shadow: 0 20px 40px rgba(229, 9, 20, 0.15);
         }
+        
         .stat-icon {
             font-size: 2.5rem;
-            width: 60px;
-            height: 60px;
-            background: #000;
+            width: 70px;
+            height: 70px;
+            background: rgba(229, 9, 20, 0.1);
+            border: 1px solid var(--red);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
+            color: var(--red);
         }
+        
         .stat-content h3 {
             font-size: 0.9rem;
-            color: #888;
+            color: var(--text-secondary);
             margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
+        
         .stat-number {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #00ffff;
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: var(--red);
+            font-family: 'Montserrat', sans-serif;
         }
+        
+        /* Quick Actions */
         .quick-actions {
-            margin: 40px 0;
+            margin: 50px 0;
         }
+        
+        .quick-actions h2 {
+            color: var(--red);
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+        }
+        
         .actions-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             margin-top: 20px;
         }
+        
         .action-card {
-            background: #1a1a1a;
-            border: 2px solid #00ffff;
-            border-radius: 8px;
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.1);
+            border-radius: 16px;
             padding: 25px;
             text-align: center;
             text-decoration: none;
-            color: #fff;
+            color: var(--text-primary);
             transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
         }
+        
+        .action-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            transform: translateX(-100%);
+            animation: slideBorder 3s infinite;
+        }
+        
         .action-card:hover {
-            background: #00ffff;
-            color: #000;
-            transform: scale(1.05);
+            transform: translateY(-5px) scale(1.02);
+            border-color: var(--red);
+            box-shadow: 0 20px 40px rgba(229, 9, 20, 0.2);
         }
+        
         .action-icon {
-            font-size: 2.5rem;
+            font-size: 3rem;
             display: block;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
+            color: var(--red);
         }
+        
+        .action-card span:last-child {
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.9rem;
+        }
+        
+        /* Screenings List */
         .screenings-list {
             margin-top: 20px;
         }
+        
         .screening-item {
             display: flex;
             align-items: center;
             gap: 20px;
-            padding: 15px;
-            background: #1a1a1a;
-            border: 1px solid #00ffff;
-            border-radius: 8px;
-            margin-bottom: 10px;
+            padding: 20px;
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.1);
+            border-radius: 16px;
+            margin-bottom: 15px;
             transition: all 0.3s;
         }
+        
         .screening-item:hover {
             transform: translateX(5px);
-            box-shadow: 0 0 20px rgba(0,255,255,0.2);
+            border-color: rgba(229, 9, 20, 0.3);
+            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.15);
         }
+        
         .screening-time {
-            font-size: 1.2rem;
-            font-weight: bold;
-            color: #00ffff;
-            min-width: 100px;
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--red);
+            min-width: 120px;
+            font-family: 'Montserrat', sans-serif;
         }
+        
         .screening-info {
             flex: 1;
         }
+        
         .screening-info h4 {
             margin-bottom: 5px;
             color: #fff;
+            font-size: 1.2rem;
         }
+        
         .screening-info p {
-            color: #888;
+            color: var(--text-secondary);
             font-size: 0.9rem;
         }
+        
         .seat-progress {
-            width: 150px;
+            width: 180px;
         }
+        
         .progress-bar {
             height: 8px;
-            background: #333;
+            background: rgba(255, 255, 255, 0.1);
             border-radius: 4px;
             overflow: hidden;
+            margin-bottom: 5px;
         }
+        
         .progress-fill {
             height: 100%;
-            background: #00ffff;
+            background: var(--red);
             border-radius: 4px;
+            transition: width 0.3s;
         }
+        
+        .seat-progress small {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+        
+        .btn-small {
+            padding: 8px 20px;
+            border: 1px solid rgba(229, 9, 20, 0.3);
+            border-radius: 40px;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        
+        .btn-small:hover {
+            border-color: var(--red);
+            color: var(--red);
+            background: rgba(229, 9, 20, 0.1);
+        }
+        
+        /* Verifications Table */
         .verifications-table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.1);
+            border-radius: 16px;
+            overflow: hidden;
         }
+        
         .verifications-table th {
             text-align: left;
-            padding: 15px;
-            background: #000;
-            color: #00ffff;
-            border-bottom: 2px solid #00ffff;
+            padding: 18px 15px;
+            background: rgba(229, 9, 20, 0.15);
+            color: var(--red);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.8rem;
         }
+        
         .verifications-table td {
-            padding: 12px 15px;
-            border-bottom: 1px solid #333;
-            color: #888;
+            padding: 15px;
+            border-bottom: 1px solid rgba(229, 9, 20, 0.1);
+            color: var(--text-secondary);
         }
+        
+        .verifications-table tr:last-child td {
+            border-bottom: none;
+        }
+        
         .verifications-table td code {
-            color: #00ffff;
-            background: #000;
-            padding: 3px 8px;
-            border-radius: 4px;
+            color: var(--red);
+            background: rgba(229, 9, 20, 0.1);
+            padding: 4px 10px;
+            border-radius: 30px;
+            font-family: 'Monaco', monospace;
         }
+        
         .badge-success {
-            background: rgba(68,255,68,0.2);
+            background: rgba(68, 255, 68, 0.15);
             color: #44ff44;
-            padding: 3px 10px;
-            border-radius: 15px;
-            font-size: 0.85rem;
+            padding: 4px 12px;
+            border-radius: 30px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border: 1px solid #44ff44;
         }
-        .pending-badge {
-            background: rgba(255,255,68,0.2);
-            color: #ffff44;
-            padding: 10px 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+        
+        /* Cinema Strip Divider */
+        .cinema-strip {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            margin: 20px 0 30px;
+            opacity: 0.3;
+        }
+        
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .screening-item {
+                flex-wrap: wrap;
+            }
+            
+            .screening-time {
+                min-width: auto;
+            }
+            
+            .seat-progress {
+                width: 100%;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .staff-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .screening-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .verifications-table {
+                overflow-x: auto;
+                display: block;
+            }
         }
     </style>
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-container">
-            <a href="../index.php" class="logo">🎬 CinemaTicket Staff</a>
+            <a href="../index.php" class="logo">CINEMA TICKET STAFF</a>
             <div class="nav-links">
                 <a href="dashboard.php" class="active">Dashboard</a>
                 <a href="cinemas.php">Cinemas</a>
@@ -277,10 +622,13 @@ $pending_verifications = $pending['pending'] ?? 0;
             </div>
         </div>
         
+        <!-- Cinema Strip Divider -->
+        <div class="cinema-strip"></div>
+        
         <!-- Pending Verifications Alert -->
         <?php if ($pending_verifications > 0): ?>
             <div class="pending-badge">
-                ⏳ You have <?php echo $pending_verifications; ?> tickets waiting to be verified today!
+                ⏳ You have <strong><?php echo $pending_verifications; ?></strong> tickets waiting to be verified today!
             </div>
         <?php endif; ?>
         
@@ -347,9 +695,11 @@ $pending_verifications = $pending['pending'] ?? 0;
         </div>
         
         <!-- Today's Screenings -->
-        <h2>Today's Screenings</h2>
+        <h2 style="color: var(--red); margin: 30px 0 20px;">Today's Screenings</h2>
         <?php if (empty($today_screenings)): ?>
-            <p style="color: #888; text-align: center; padding: 40px;">No screenings scheduled for today.</p>
+            <div style="text-align: center; padding: 40px; background: var(--card-gradient); border-radius: 16px; border: 1px solid rgba(229,9,20,0.1);">
+                <p style="color: var(--text-secondary);">No screenings scheduled for today.</p>
+            </div>
         <?php else: ?>
             <div class="screenings-list">
                 <?php foreach ($today_screenings as $screening): 
@@ -370,7 +720,7 @@ $pending_verifications = $pending['pending'] ?? 0;
                             <div class="progress-bar">
                                 <div class="progress-fill" style="width: <?php echo $occupancy; ?>%"></div>
                             </div>
-                            <small style="color: #888;"><?php echo $sold; ?>/<?php echo $total_seats; ?> seats</small>
+                            <small><?php echo $sold; ?>/<?php echo $total_seats; ?> seats</small>
                         </div>
                         <a href="tickets_list.php?screening_id=<?php echo $screening['id']; ?>" class="btn-small">View Tickets</a>
                     </div>
@@ -379,7 +729,7 @@ $pending_verifications = $pending['pending'] ?? 0;
         <?php endif; ?>
         
         <!-- Recent Verifications -->
-        <h2 style="margin-top: 40px;">Recent Verifications</h2>
+        <h2 style="color: var(--red); margin: 40px 0 20px;">Recent Verifications</h2>
         <table class="verifications-table">
             <thead>
                 <tr>
@@ -402,7 +752,7 @@ $pending_verifications = $pending['pending'] ?? 0;
                 <?php endforeach; ?>
                 <?php if (empty($recent_verifications)): ?>
                     <tr>
-                        <td colspan="5" style="text-align: center; padding: 30px; color: #888;">No recent verifications</td>
+                        <td colspan="5" style="text-align: center; padding: 30px; color: var(--text-secondary);">No recent verifications</td>
                     </tr>
                 <?php endif; ?>
             </tbody>

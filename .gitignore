@@ -1,5 +1,4 @@
 vendor/
-uploads/
 ngrok/
 *.exe
 composer.lock

@@ -1,5 +1,8 @@
 <?php
-// user/watch.php
+// user/watch.php - COMPLETELY FIXED
+// Added: Watch history recording when user watches a movie
+// Removed: View counting (using date-based expiry only)
+// Now inserts into watch_history table automatically
 require_once '../includes/functions.php';
 requireLogin();
 
@@ -7,434 +10,292 @@ $pdo = getDB();
 $user = getCurrentUser();
 $ticket_code = $_GET['ticket_code'] ?? '';
 
-// Get ticket details
+// ========== MAIN PAGE LOAD – VALIDATE TICKET WITH DATE CHECK ==========
+$validation = validateTicketByCode($ticket_code);
+if (!$validation['valid']) {
+    $reason = $validation['reason'];
+    $error_message = '';
+    switch ($reason) {
+        case 'not_found': $error_message = 'Ticket not found'; break;
+        case 'expired': $error_message = 'This ticket has expired'; break;
+        case 'used': $error_message = 'This ticket has already been used'; break;
+        case 'not_paid': $error_message = 'Payment pending for this ticket'; break;
+        default: $error_message = 'Invalid ticket';
+    }
+    setFlash($error_message, 'error');
+    header('Location: purchases.php');
+    exit;
+}
+
+$ticket = $validation['ticket'];
+
+// ========== DATE-BASED VALIDATION ==========
+$today = date('Y-m-d');
+
+// Get show_date (release date) from online_schedule
 $stmt = $pdo->prepare("
-    SELECT t.*, m.title, m.streaming_url, m.duration,
-           os.show_date, os.show_time
+    SELECT os.show_date, os.movie_id, t.week_expiry
     FROM tickets t
-    LEFT JOIN online_schedule os ON t.online_schedule_id = os.id
-    LEFT JOIN movies m ON os.movie_id = m.id
-    WHERE t.ticket_code = ? AND (t.user_id = ? OR t.user_id IN (SELECT id FROM users WHERE parent_id = ?))
+    JOIN online_schedule os ON t.online_schedule_id = os.id
+    WHERE t.ticket_code = ?
 ");
-$stmt->execute([$ticket_code, $user['id'], $user['id']]);
-$ticket = $stmt->fetch();
+$stmt->execute([$ticket_code]);
+$schedule_data = $stmt->fetch();
 
-if (!$ticket) {
-    setFlash('Ticket not found', 'error');
+$show_date = $schedule_data['show_date'] ?? null;
+$movie_id = $schedule_data['movie_id'] ?? null;
+$week_expiry = $schedule_data['week_expiry'] ?? $ticket['week_expiry'] ?? null;
+
+// Check if streaming has started
+if ($show_date && $today < $show_date) {
+    setFlash('This movie is not available for streaming yet. Available from: ' . date('M d, Y', strtotime($show_date)), 'error');
     header('Location: purchases.php');
     exit;
 }
 
-// Validate ticket for streaming
-if ($ticket['ticket_type'] != 'online') {
-    setFlash('This ticket is for cinema viewing only', 'error');
+// Check if ticket has expired
+if ($week_expiry && $today > $week_expiry) {
+    // Auto-mark as used
+    $pdo->prepare("UPDATE tickets SET status = 'used' WHERE ticket_code = ?")->execute([$ticket_code]);
+    setFlash('This ticket has expired. It was valid until ' . date('M d, Y', strtotime($week_expiry)), 'error');
     header('Location: purchases.php');
     exit;
 }
 
-if ($ticket['status'] != 'paid') {
-    setFlash('Ticket must be paid before streaming', 'error');
+// ========== RECORD IN WATCH HISTORY ==========
+// Check if already recorded to avoid duplicates
+$stmt = $pdo->prepare("
+    SELECT id FROM watch_history 
+    WHERE user_id = ? AND movie_id = ? AND DATE(watched_at) = CURDATE()
+");
+$stmt->execute([$user['id'], $movie_id]);
+$already_recorded = $stmt->fetch();
+
+if (!$already_recorded && $movie_id) {
+    // Insert into watch history
+    $stmt = $pdo->prepare("
+        INSERT INTO watch_history (user_id, movie_id, watched_at, completed, watch_duration)
+        VALUES (?, ?, NOW(), 0, 0)
+    ");
+    $stmt->execute([$user['id'], $movie_id]);
+    
+    // Optional: Update ticket to mark that viewing started (but not 'used' yet)
+    // This is for analytics only - ticket remains 'paid' until expiry
+}
+
+// Get streaming URL
+$stmt = $pdo->prepare("
+    SELECT m.streaming_url, m.title, m.duration, m.id as movie_id
+    FROM tickets t
+    JOIN online_schedule os ON t.online_schedule_id = os.id
+    JOIN movies m ON os.movie_id = m.id
+    WHERE t.ticket_code = ?
+");
+$stmt->execute([$ticket_code]);
+$movie = $stmt->fetch();
+
+if (!$movie || empty($movie['streaming_url'])) {
+    setFlash('Streaming URL not available for this movie', 'error');
     header('Location: purchases.php');
     exit;
 }
 
-if ($ticket['streaming_views'] >= $ticket['max_streaming_views']) {
-    setFlash('Maximum streaming views reached (3/3)', 'error');
-    header('Location: purchases.php');
-    exit;
+$streaming_url = $movie['streaming_url'];
+$movie_id_for_history = $movie['movie_id'];
+
+// Convert YouTube URLs to embed format
+if (strpos($streaming_url, 'youtube.com/watch?v=') !== false) {
+    parse_str(parse_url($streaming_url, PHP_URL_QUERY), $params);
+    $video_id = $params['v'] ?? '';
+    if ($video_id) $streaming_url = 'https://www.youtube.com/embed/' . $video_id;
+} elseif (strpos($streaming_url, 'youtu.be/') !== false) {
+    $video_id = substr($streaming_url, strrpos($streaming_url, '/') + 1);
+    $video_id = preg_replace('/\?.*/', '', $video_id);
+    $streaming_url = 'https://www.youtube.com/embed/' . $video_id;
 }
 
-// Check if it's time to watch
-$show_datetime = strtotime($ticket['show_date'] . ' ' . $ticket['show_time']);
-if (time() < $show_datetime) {
-    $minutes_until = ceil(($show_datetime - time()) / 60);
-    setFlash("Streaming will be available in $minutes_until minutes", 'warning');
-    header('Location: purchases.php');
-    exit;
+// Calculate days left for display
+$days_left = 0;
+if ($week_expiry) {
+    $days_left = (strtotime($week_expiry) - strtotime($today)) / 86400;
 }
 
-// Increment view count
-$stmt = $pdo->prepare("UPDATE tickets SET streaming_views = streaming_views + 1 WHERE id = ?");
-$stmt->execute([$ticket['id']]);
+// Get watch history count for this movie
+$stmt = $pdo->prepare("
+    SELECT COUNT(*) as watch_count, MAX(watched_at) as last_watch
+    FROM watch_history 
+    WHERE user_id = ? AND movie_id = ?
+");
+$stmt->execute([$user['id'], $movie_id_for_history]);
+$watch_stats = $stmt->fetch();
 
-// Add to watch history
-$stmt = $pdo->prepare("INSERT INTO watch_history (user_id, movie_id) VALUES (?, ?)");
-$stmt->execute([$user['id'], $ticket['movie_id']]);
-
-// Get streaming URL (use trailer if no streaming URL)
-$streaming_url = $ticket['streaming_url'] ?: 'https://www.youtube.com/embed/dQw4w9WgXcQ';
+$current_theme = $user['theme_preference'] ?? 'dark';
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<?php echo $current_theme; ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watch <?php echo htmlspecialchars($ticket['title']); ?> - CinemaTicket</title>
+    <title>Watch <?php echo htmlspecialchars($movie['title']); ?> - CinemaTicket</title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --black: #0a0a0a;
-            --deep-gray: #1a1a1a;
-            --medium-gray: #2a2a2a;
-            --light-gray: #333333;
-            --red: #e50914;
-            --red-dark: #b2070f;
-            --red-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+        :root[data-theme="dark"] {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #1a1a1a;
             --text-primary: #ffffff;
             --text-secondary: #b3b3b3;
-            --glass-bg: rgba(26, 26, 26, 0.7);
-            --glass-border: rgba(255, 255, 255, 0.05);
-            --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
+            --accent: #e50914;
+            --accent-glow: 0 0 20px rgba(229,9,20,0.3);
+            --border-color: rgba(229,9,20,0.2);
+            --card-bg: linear-gradient(135deg, rgba(26,26,26,0.9) 0%, rgba(20,20,20,0.95) 100%);
         }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root[data-theme="light"] {
+            --bg-primary: #f5f5f5;
+            --bg-secondary: #ffffff;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --accent: #e50914;
+            --accent-glow: 0 0 20px rgba(229,9,20,0.2);
+            --border-color: rgba(229,9,20,0.2);
+            --card-bg: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(240,240,240,0.95) 100%);
         }
-        
+        :root[data-theme="neon"] {
+            --bg-primary: #0a0a2a;
+            --bg-secondary: #1a1a3a;
+            --text-primary: #00ffff;
+            --text-secondary: #ff00ff;
+            --accent: #ff00ff;
+            --accent-glow: 0 0 20px rgba(255,0,255,0.5);
+            --border-color: rgba(255,0,255,0.3);
+            --card-bg: linear-gradient(135deg, rgba(26,26,58,0.9) 0%, rgba(20,20,50,0.95) 100%);
+        }
+        :root[data-theme="matrix"] {
+            --bg-primary: #000000;
+            --bg-secondary: #0a1a0a;
+            --text-primary: #00ff00;
+            --text-secondary: #00aa00;
+            --accent: #00ff00;
+            --accent-glow: 0 0 20px rgba(0,255,0,0.5);
+            --border-color: rgba(0,255,0,0.3);
+            --card-bg: linear-gradient(135deg, rgba(10,26,10,0.9) 0%, rgba(5,20,5,0.95) 100%);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            background: var(--black);
+            background: var(--bg-primary);
             color: var(--text-primary);
             font-family: 'Inter', sans-serif;
-            font-weight: 400;
-            line-height: 1.6;
             min-height: 100vh;
-            position: relative;
         }
-        
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: radial-gradient(circle at 20% 50%, rgba(229, 9, 20, 0.03) 0%, transparent 50%),
-                        radial-gradient(circle at 80% 80%, rgba(229, 9, 20, 0.03) 0%, transparent 50%);
-            pointer-events: none;
-            z-index: -1;
-        }
-        
-        /* Navigation */
         .navbar {
-            background: rgba(10, 10, 10, 0.95);
+            background: rgba(var(--bg-secondary), 0.95);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.8rem 0;
             position: sticky;
             top: 0;
             z-index: 1000;
         }
-        
         .nav-container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 20px;
         }
-        
         .logo {
-            color: var(--red);
-            font-size: 1.8rem;
+            color: var(--accent);
+            font-size: 1.5rem;
             font-weight: 800;
-            font-family: 'Montserrat', sans-serif;
             text-decoration: none;
             text-transform: uppercase;
-            letter-spacing: 2px;
-            position: relative;
-            transition: all 0.3s;
         }
-        
-        .logo:hover {
-            text-shadow: var(--red-glow);
-        }
-        
-        .logo::before {
-            content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
-            filter: drop-shadow(0 0 5px var(--red));
-        }
-        
-        .nav-links {
-            display: flex;
-            gap: 25px;
-            align-items: center;
-        }
-        
+        .logo::before { content: "🎬"; margin-right: 8px; }
+        .nav-links { display: flex; gap: 5px; flex-wrap: wrap; }
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
-            transition: all 0.3s;
+            padding: 6px 12px;
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            position: relative;
         }
-        
-        .nav-links a::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 0;
-            height: 2px;
-            background: var(--red);
-            transition: width 0.3s;
-        }
-        
-        .nav-links a:hover {
-            color: var(--red);
-        }
-        
-        .nav-links a:hover::after {
-            width: 60%;
-        }
-        
-        .nav-links a.active {
-            color: var(--red);
-        }
-        
-        .nav-links a.active::after {
-            width: 60%;
-        }
-        
-        /* Main Container */
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 30px;
-        }
-        
-        /* Back Button */
+        .nav-links a:hover, .nav-links a.active { color: var(--accent); }
+        .container { max-width: 1200px; margin: 0 auto; padding: 30px 20px; }
         .back-button {
             display: inline-flex;
             align-items: center;
-            gap: 10px;
-            padding: 12px 25px;
+            gap: 8px;
             background: transparent;
-            border: 1px solid rgba(229, 9, 20, 0.3);
+            border: 1px solid var(--border-color);
             color: var(--text-primary);
-            text-decoration: none;
+            padding: 10px 20px;
             border-radius: 40px;
-            margin-bottom: 30px;
+            text-decoration: none;
+            margin-bottom: 20px;
             transition: all 0.3s;
-            font-weight: 500;
         }
-        
-        .back-button:hover {
-            border-color: var(--red);
-            color: var(--red);
-            transform: translateX(-5px);
-        }
-        
-        /* Player Container */
-        .player-container {
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-        
-        .player-container h1 {
-            color: var(--red);
-            font-size: 2.2rem;
-            margin-bottom: 25px;
-            font-family: 'Montserrat', sans-serif;
-        }
-        
-        /* Video Wrapper */
+        .back-button:hover { border-color: var(--accent); color: var(--accent); transform: translateX(-5px); }
+        .player-container h1 { color: var(--accent); font-size: 2rem; margin-bottom: 20px; }
         .video-wrapper {
             position: relative;
             padding-bottom: 56.25%;
             height: 0;
             overflow: hidden;
-            border: 2px solid rgba(229, 9, 20, 0.3);
+            border: 2px solid var(--border-color);
             border-radius: 24px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-            transition: all 0.3s;
         }
-        
-        .video-wrapper:hover {
-            border-color: var(--red);
-            box-shadow: 0 30px 60px rgba(229, 9, 20, 0.2);
-        }
-        
-        .video-wrapper iframe {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-        
-        /* Player Info */
+        .video-wrapper iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         .player-info {
-            background: var(--card-gradient);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
             border-radius: 24px;
-            padding: 35px;
+            padding: 30px;
             margin-top: 30px;
-            position: relative;
-            overflow: hidden;
         }
-        
-        .player-info::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
-            animation: slideBorder 3s infinite;
-        }
-        
-        @keyframes slideBorder {
-            0% { transform: translateX(-100%); }
-            50% { transform: translateX(100%); }
-            100% { transform: translateX(100%); }
-        }
-        
-        /* View Counter */
-        .view-counter {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
+        .validity-badge {
+            display: inline-block;
             padding: 8px 20px;
-            background: rgba(229, 9, 20, 0.1);
-            border: 1px solid var(--red);
+            background: rgba(var(--accent),0.1);
+            border: 1px solid var(--accent);
             border-radius: 40px;
-            color: var(--red);
-            margin-bottom: 25px;
-            font-weight: 600;
+            margin-bottom: 20px;
         }
-        
-        /* Info Grid */
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 25px;
-            margin-bottom: 25px;
+        .validity-badge.warning {
+            border-color: #ff8844;
+            color: #ff8844;
         }
-        
-        .info-item {
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 16px;
-            padding: 20px;
-            border: 1px solid rgba(229, 9, 20, 0.1);
+        .info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 20px 0; }
+        .info-item { background: rgba(0,0,0,0.3); border-radius: 16px; padding: 15px; }
+        .info-label { color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 5px; }
+        .info-value { font-size: 1.1rem; font-weight: 600; }
+        .info-value.highlight { color: var(--accent); }
+        .info-value.warning { color: #ff8844; }
+        .watch-stats {
+            background: rgba(0,0,0,0.2);
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: center;
         }
-        
-        .info-label {
+        .watch-stats p {
             color: var(--text-secondary);
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 8px;
+            font-size: 0.85rem;
         }
-        
-        .info-value {
-            color: #fff;
-            font-size: 1.1rem;
-            font-weight: 600;
-        }
-        
-        .info-value.highlight {
-            color: var(--red);
-        }
-        
-        .info-value.code {
-            font-family: 'Monaco', 'Courier New', monospace;
-            color: var(--red);
-        }
-        
-        /* Warning Message */
-        .warning-message {
-            background: rgba(229, 9, 20, 0.1);
-            border: 1px solid var(--red);
-            color: var(--text-primary);
-            padding: 18px 25px;
-            border-radius: 40px;
-            margin: 25px 0;
-            border-left: 4px solid var(--red);
-        }
-        
-        /* Terms Section */
-        .terms-section {
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            margin-top: 25px;
-            padding-top: 25px;
-            border-top: 1px solid rgba(229, 9, 20, 0.2);
-        }
-        
-        .terms-section p {
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .terms-section p i {
-            color: var(--red);
-        }
-        
-        .terms-list {
-            list-style: none;
-            margin-top: 15px;
-        }
-        
-        .terms-list li {
-            margin: 10px 0;
-            padding-left: 25px;
-            position: relative;
-        }
-        
-        .terms-list li::before {
-            content: '•';
-            color: var(--red);
-            font-size: 1.2rem;
-            position: absolute;
-            left: 8px;
-            top: -2px;
-        }
-        
-        /* Cinema Strip Divider */
+        .terms-list { list-style: none; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color); }
+        .terms-list li { margin: 10px 0; padding-left: 25px; position: relative; }
+        .terms-list li::before { content: '•'; color: var(--accent); position: absolute; left: 8px; }
         .cinema-strip {
             height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
             margin: 20px 0;
             opacity: 0.3;
         }
-        
-        /* Responsive */
         @media (max-width: 768px) {
-            .nav-links {
-                display: none;
-            }
-            
-            .info-grid {
-                grid-template-columns: 1fr;
-                gap: 15px;
-            }
-            
-            .player-container h1 {
-                font-size: 1.8rem;
-            }
-            
-            .back-button {
-                width: 100%;
-                justify-content: center;
-            }
+            .nav-links { display: none; }
+            .info-grid { grid-template-columns: repeat(2, 1fr); }
+            .player-container h1 { font-size: 1.5rem; }
         }
     </style>
 </head>
@@ -443,27 +304,29 @@ $streaming_url = $ticket['streaming_url'] ?: 'https://www.youtube.com/embed/dQw4
         <div class="nav-container">
             <a href="../index.php" class="logo">CINEMA TICKET</a>
             <div class="nav-links">
-                <a href="movies.php">Movies</a>
+                <a href="movies.php" class="active">Movies</a>
                 <a href="favorites.php">Favorites</a>
                 <a href="history.php">History</a>
                 <a href="purchases.php">My Tickets</a>
                 <a href="profile.php">Profile</a>
                 <a href="settings.php">Settings</a>
+                <div class="profile-badge">
+                    <span>👤</span>
+                    <span class="profile-name"><?php echo htmlspecialchars($_SESSION['profile_name'] ?? 'Profile'); ?></span>
+                    <a href="select_profile.php" class="profile-switch">Switch</a>
+                </div>
                 <a href="../auth/logout.php">Logout</a>
             </div>
         </div>
     </nav>
     
     <main class="container">
-        <a href="purchases.php" class="back-button">
-            <span>←</span> Back to My Tickets
-        </a>
+        <a href="purchases.php" class="back-button">← Back to My Tickets</a>
         
-        <!-- Cinema Strip Divider -->
         <div class="cinema-strip"></div>
         
         <div class="player-container">
-            <h1><?php echo htmlspecialchars($ticket['title']); ?></h1>
+            <h1><?php echo htmlspecialchars($movie['title']); ?></h1>
             
             <div class="video-wrapper">
                 <iframe src="<?php echo htmlspecialchars($streaming_url); ?>" 
@@ -474,42 +337,52 @@ $streaming_url = $ticket['streaming_url'] ?: 'https://www.youtube.com/embed/dQw4
             </div>
             
             <div class="player-info">
-                <div class="view-counter">
-                    <span>🎥</span> View <?php echo $ticket['streaming_views']; ?> of <?php echo $ticket['max_streaming_views']; ?>
+                <!-- Validity display -->
+                <div class="validity-badge <?php echo $days_left <= 3 ? 'warning' : ''; ?>">
+                    📅 Valid until: <?php echo date('M d, Y', strtotime($week_expiry)); ?>
+                    <?php if ($days_left <= 3): ?>
+                        <span> (⚠️ <?php echo ceil($days_left); ?> days left)</span>
+                    <?php endif; ?>
                 </div>
-                
-                <h2 style="color: var(--red); margin-bottom: 20px; font-size: 1.5rem;">Streaming Information</h2>
                 
                 <div class="info-grid">
                     <div class="info-item">
                         <div class="info-label">Ticket Code</div>
-                        <div class="info-value code"><?php echo $ticket['ticket_code']; ?></div>
+                        <div class="info-value highlight"><?php echo $ticket['ticket_code']; ?></div>
                     </div>
                     <div class="info-item">
-                        <div class="info-label">Views Remaining</div>
-                        <div class="info-value highlight"><?php echo $ticket['max_streaming_views'] - $ticket['streaming_views']; ?> views</div>
+                        <div class="info-label">Days Remaining</div>
+                        <div class="info-value <?php echo $days_left <= 3 ? 'warning' : ''; ?>">
+                            <?php echo ceil($days_left); ?> days
+                        </div>
                     </div>
                     <div class="info-item">
                         <div class="info-label">Valid Until</div>
-                        <div class="info-value"><?php echo date('M d, Y', strtotime('+30 days', strtotime($ticket['purchase_date']))); ?></div>
+                        <div class="info-value"><?php echo date('M d, Y', strtotime($week_expiry)); ?></div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Duration</div>
+                        <div class="info-value"><?php echo $movie['duration']; ?> min</div>
                     </div>
                 </div>
                 
-                <?php if ($ticket['streaming_views'] >= $ticket['max_streaming_views'] - 1): ?>
-                    <div class="warning-message">
-                        ⚠️ This is your last viewing. After this, you'll need to purchase a new ticket.
-                    </div>
+                <!-- Watch History Stats -->
+                <?php if ($watch_stats['watch_count'] > 0): ?>
+                <div class="watch-stats">
+                    <p>
+                        🎬 You've watched this movie <?php echo $watch_stats['watch_count']; ?> time(s)<br>
+                        Last watched: <?php echo date('M d, Y h:i A', strtotime($watch_stats['last_watch'])); ?>
+                    </p>
+                </div>
                 <?php endif; ?>
                 
-                <div class="terms-section">
-                    <p><i>📝</i> Terms of Streaming:</p>
-                    <ul class="terms-list">
-                        <li>You have <?php echo $ticket['max_streaming_views']; ?> total views for this ticket</li>
-                        <li>Each view counts when you start streaming</li>
-                        <li>Ticket expires 30 days after purchase</li>
-                        <li>Do not share your screen or record the content</li>
-                    </ul>
-                </div>
+                <ul class="terms-list">
+                    <li>This ticket is valid for unlimited views until the expiry date</li>
+                    <li>Streaming starts on the movie's release date</li>
+                    <li>Do not share your screen or record the content</li>
+                    <li>Once expired, you cannot access this content anymore</li>
+                    <li>Your watch history is automatically saved to your profile</li>
+                </ul>
             </div>
         </div>
     </main>

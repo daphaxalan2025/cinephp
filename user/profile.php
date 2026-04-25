@@ -1,5 +1,5 @@
 <?php
-// user/profile.php
+// user/profile.php - COMPLETELY FIXED: Removed parent_id reference
 require_once '../includes/functions.php';
 requireLogin();
 
@@ -7,6 +7,14 @@ $pdo = getDB();
 $user = getCurrentUser();
 $errors = [];
 $success = '';
+
+// Helper function to get avatar image (for profile display)
+function getProfileAvatarImage($avatar_filename) {
+    if (!empty($avatar_filename) && file_exists('../uploads/avatars/' . $avatar_filename)) {
+        return '../uploads/avatars/' . $avatar_filename;
+    }
+    return null;
+}
 
 // Handle profile picture upload
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['profile_pic']) && $_FILES['profile_pic']['size'] > 0) {
@@ -17,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['profile_pic']) && $_F
     }
     
     $allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
-    $max_size = 2 * 1024 * 1024; // 2MB
+    $max_size = 2 * 1024 * 1024;
     
     if (!in_array($_FILES['profile_pic']['type'], $allowed_types)) {
         $errors[] = 'Invalid file type. Only JPG, PNG and GIF are allowed.';
@@ -29,7 +37,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['profile_pic']) && $_F
         $target_file = $target_dir . $filename;
         
         if (move_uploaded_file($_FILES['profile_pic']['tmp_name'], $target_file)) {
-            // Delete old profile picture if exists
             if ($user['profile_pic'] && file_exists($target_dir . $user['profile_pic'])) {
                 unlink($target_dir . $user['profile_pic']);
             }
@@ -57,7 +64,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_profile'])) {
     if (empty($email)) $errors[] = 'Email is required';
     elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Invalid email format';
     
-    // Check if email exists
     if ($email != $user['email']) {
         $check = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
         $check->execute([$email, $user['id']]);
@@ -120,28 +126,12 @@ $stmt = $pdo->prepare("SELECT COALESCE(SUM(total_price), 0) FROM tickets WHERE u
 $stmt->execute([$user['id']]);
 $total_spent = $stmt->fetchColumn();
 
-// Get linked accounts (for adults only)
-$linked_accounts = [];
-if ($user['account_type'] == 'adult') {
-    $stmt = $pdo->prepare("
-        SELECT id, username, first_name, last_name, account_type, created_at, profile_pic
-        FROM users WHERE parent_id = ? 
-        ORDER BY created_at DESC
-    ");
-    $stmt->execute([$user['id']]);
-    $linked_accounts = $stmt->fetchAll();
-}
-
-// Get parent info (for kids/teens)
-$parent = null;
-if ($user['parent_id']) {
-    $stmt = $pdo->prepare("SELECT first_name, last_name, email FROM users WHERE id = ?");
-    $stmt->execute([$user['parent_id']]);
-    $parent = $stmt->fetch();
-}
+// Get current theme
+$current_theme = $user['theme_preference'] ?? 'dark';
+$profile_type = $_SESSION['profile_type'] ?? 'adult';
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<?php echo $current_theme; ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -149,35 +139,78 @@ if ($user['parent_id']) {
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --black: #0a0a0a;
-            --deep-gray: #1a1a1a;
-            --medium-gray: #2a2a2a;
-            --light-gray: #333333;
-            --red: #e50914;
-            --red-dark: #b2070f;
-            --red-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+        /* Theme Variables - Matching movies.php */
+        :root[data-theme="dark"] {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #2a2a2a;
             --text-primary: #ffffff;
             --text-secondary: #b3b3b3;
+            --accent: #e50914;
+            --accent-dark: #b2070f;
+            --accent-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+            --border-color: rgba(229, 9, 20, 0.2);
+            --card-bg: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
             --glass-bg: rgba(26, 26, 26, 0.7);
             --glass-border: rgba(255, 255, 255, 0.05);
-            --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
+            --success-color: #44ff44;
         }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+
+        :root[data-theme="light"] {
+            --bg-primary: #f5f5f5;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #e0e0e0;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --accent: #e50914;
+            --accent-dark: #b2070f;
+            --accent-glow: 0 0 20px rgba(229, 9, 20, 0.2);
+            --border-color: rgba(229, 9, 20, 0.2);
+            --card-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(240, 240, 240, 0.95) 100%);
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(229, 9, 20, 0.1);
+            --success-color: #00aa00;
         }
+
+        :root[data-theme="neon"] {
+            --bg-primary: #0a0a2a;
+            --bg-secondary: #1a1a3a;
+            --bg-tertiary: #2a2a4a;
+            --text-primary: #00ffff;
+            --text-secondary: #ff00ff;
+            --accent: #ff00ff;
+            --accent-dark: #cc00cc;
+            --accent-glow: 0 0 20px rgba(255, 0, 255, 0.5);
+            --border-color: rgba(255, 0, 255, 0.3);
+            --card-bg: linear-gradient(135deg, rgba(26, 26, 58, 0.9) 0%, rgba(20, 20, 50, 0.95) 100%);
+            --glass-bg: rgba(26, 26, 58, 0.7);
+            --glass-border: rgba(255, 0, 255, 0.2);
+            --success-color: #00ffff;
+        }
+
+        :root[data-theme="matrix"] {
+            --bg-primary: #000000;
+            --bg-secondary: #0a1a0a;
+            --bg-tertiary: #0f2a0f;
+            --text-primary: #00ff00;
+            --text-secondary: #00aa00;
+            --accent: #00ff00;
+            --accent-dark: #00aa00;
+            --accent-glow: 0 0 20px rgba(0, 255, 0, 0.5);
+            --border-color: rgba(0, 255, 0, 0.3);
+            --card-bg: linear-gradient(135deg, rgba(10, 26, 10, 0.9) 0%, rgba(5, 20, 5, 0.95) 100%);
+            --glass-bg: rgba(10, 26, 10, 0.7);
+            --glass-border: rgba(0, 255, 0, 0.2);
+            --success-color: #00ff00;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
-            background: var(--black);
+            background: var(--bg-primary);
             color: var(--text-primary);
             font-family: 'Inter', sans-serif;
-            font-weight: 400;
-            line-height: 1.6;
-            min-height: 100vh;
-            position: relative;
+            transition: background-color 0.3s ease;
         }
         
         body::before {
@@ -187,84 +220,59 @@ if ($user['parent_id']) {
             left: 0;
             right: 0;
             bottom: 0;
-            background: radial-gradient(circle at 20% 50%, rgba(229, 9, 20, 0.03) 0%, transparent 50%),
-                        radial-gradient(circle at 80% 80%, rgba(229, 9, 20, 0.03) 0%, transparent 50%);
+            background: radial-gradient(circle at 20% 50%, var(--accent) 0%, transparent 50%);
+            opacity: 0.03;
             pointer-events: none;
             z-index: -1;
         }
         
-        /* Glassmorphism Base */
-        .glass {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid var(--glass-border);
-            border-radius: 12px;
-        }
-        
-        /* Navigation */
         .navbar {
-            background: rgba(10, 10, 10, 0.95);
+            background: rgba(var(--bg-secondary), 0.95);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.8rem 0;
             position: sticky;
             top: 0;
             z-index: 1000;
         }
         
         .nav-container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 20px;
         }
         
         .logo {
-            color: var(--red);
-            font-size: 1.8rem;
+            color: var(--accent);
+            font-size: 1.5rem;
             font-weight: 800;
             font-family: 'Montserrat', sans-serif;
             text-decoration: none;
             text-transform: uppercase;
-            letter-spacing: 2px;
-            position: relative;
-            transition: all 0.3s;
+            letter-spacing: 1.5px;
+            white-space: nowrap;
         }
         
-        .logo:hover {
-            text-shadow: var(--red-glow);
-        }
+        .logo:hover { text-shadow: var(--accent-glow); }
+        .logo::before { content: "🎬"; margin-right: 8px; font-size: 1.2rem; filter: drop-shadow(0 0 5px var(--accent)); }
         
-        .logo::before {
-            content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
-            filter: drop-shadow(0 0 5px var(--red));
-        }
-        
-        .nav-links {
-            display: flex;
-            gap: 25px;
-            align-items: center;
-        }
-        
+        .nav-links { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             transition: all 0.3s;
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             position: relative;
+            white-space: nowrap;
         }
-        
         .nav-links a::after {
             content: '';
             position: absolute;
@@ -273,46 +281,75 @@ if ($user['parent_id']) {
             transform: translateX(-50%);
             width: 0;
             height: 2px;
-            background: var(--red);
+            background: var(--accent);
             transition: width 0.3s;
         }
+        .nav-links a:hover { color: var(--accent); }
+        .nav-links a:hover::after { width: 60%; }
+        .nav-links a.active { color: var(--accent); }
         
-        .nav-links a:hover {
-            color: var(--red);
+        .profile-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(var(--accent), 0.15);
+            padding: 6px 15px;
+            border-radius: 40px;
+            margin-left: 10px;
+            font-size: 0.85rem;
         }
-        
-        .nav-links a:hover::after {
-            width: 60%;
+        .profile-badge .profile-name { font-weight: 600; color: var(--accent); }
+        .profile-badge .profile-switch {
+            color: var(--text-primary);
+            text-decoration: none;
+            padding: 4px 10px;
+            background: rgba(var(--accent), 0.2);
+            border-radius: 30px;
+            transition: all 0.3s;
+            font-size: 0.7rem;
         }
+        .profile-badge .profile-switch:hover { background: var(--accent); color: var(--bg-primary); }
         
-        .nav-links a.active {
-            color: var(--red);
-        }
+        .container { max-width: 1600px; margin: 0 auto; padding: 30px 20px; }
         
-        .nav-links a.active::after {
-            width: 60%;
-        }
-        
-        /* Main Container */
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 30px;
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            gap: 20px;
         }
         
         h1 {
             font-size: 2.5rem;
             font-weight: 800;
-            background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            margin: 0 0 30px 0;
+            margin: 0;
             text-transform: uppercase;
             letter-spacing: 2px;
         }
         
-        /* Profile Container */
+        .account-badge {
+            background: rgba(var(--accent), 0.15);
+            border: 1px solid var(--accent);
+            border-radius: 40px;
+            padding: 8px 20px;
+            font-size: 0.9rem;
+        }
+        .account-badge span { color: var(--text-secondary); margin-right: 5px; }
+        .account-badge strong { color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
+        
+        .cinema-strip {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            margin: 20px 0 30px;
+            opacity: 0.3;
+        }
+        
         .profile-container {
             display: grid;
             grid-template-columns: 350px 1fr;
@@ -320,12 +357,10 @@ if ($user['parent_id']) {
             margin-top: 30px;
         }
         
-        /* Sidebar */
         .profile-sidebar {
-            background: var(--card-gradient);
+            background: var(--card-bg);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            border: 1px solid var(--border-color);
             border-radius: 24px;
             padding: 30px;
             text-align: center;
@@ -340,7 +375,7 @@ if ($user['parent_id']) {
             left: 0;
             right: 0;
             height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
             animation: slideBorder 3s infinite;
         }
         
@@ -361,23 +396,23 @@ if ($user['parent_id']) {
             width: 150px;
             height: 150px;
             border-radius: 50%;
-            border: 3px solid var(--red);
+            border: 3px solid var(--accent);
             object-fit: cover;
-            box-shadow: 0 0 30px rgba(229, 9, 20, 0.3);
+            box-shadow: 0 0 30px var(--accent-glow);
         }
         
         .profile-avatar-placeholder {
             width: 150px;
             height: 150px;
             border-radius: 50%;
-            background: rgba(229, 9, 20, 0.1);
-            border: 3px solid var(--red);
+            background: rgba(var(--accent), 0.1);
+            border: 3px solid var(--accent);
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 3rem;
             font-weight: 700;
-            color: var(--red);
+            color: var(--accent);
             font-family: 'Montserrat', sans-serif;
         }
         
@@ -385,8 +420,8 @@ if ($user['parent_id']) {
             position: absolute;
             bottom: 5px;
             right: 5px;
-            background: var(--red);
-            color: #fff;
+            background: var(--accent);
+            color: var(--bg-primary);
             width: 40px;
             height: 40px;
             border-radius: 50%;
@@ -394,42 +429,33 @@ if ($user['parent_id']) {
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            border: 2px solid var(--black);
+            border: 2px solid var(--bg-primary);
             transition: all 0.3s;
-            box-shadow: 0 0 20px rgba(229, 9, 20, 0.3);
+            box-shadow: 0 0 20px var(--accent-glow);
         }
-        
-        .upload-btn:hover {
-            transform: scale(1.1) rotate(90deg);
-            box-shadow: 0 0 30px rgba(229, 9, 20, 0.5);
-        }
-        
+        .upload-btn:hover { transform: scale(1.1) rotate(90deg); box-shadow: 0 0 30px var(--accent-glow); }
         #profile_pic { display: none; }
         
         .profile-name {
             font-size: 1.8rem;
             font-weight: 700;
-            color: #fff;
+            color: var(--text-primary);
             margin-bottom: 5px;
             font-family: 'Montserrat', sans-serif;
         }
         
-        .profile-username {
-            color: var(--text-secondary);
-            margin-bottom: 20px;
-        }
+        .profile-username { color: var(--text-secondary); margin-bottom: 20px; }
         
-        .profile-badge {
+        .profile-badge-sidebar {
             display: inline-block;
             padding: 8px 20px;
-            background: rgba(229, 9, 20, 0.15);
-            border: 1px solid var(--red);
+            background: rgba(var(--accent), 0.15);
+            border: 1px solid var(--accent);
             border-radius: 40px;
-            color: var(--red);
+            color: var(--accent);
             font-weight: 700;
             margin-bottom: 20px;
             text-transform: uppercase;
-            letter-spacing: 1px;
             font-size: 0.8rem;
         }
         
@@ -439,14 +465,14 @@ if ($user['parent_id']) {
             gap: 10px;
             margin: 20px 0;
             padding: 20px 0;
-            border-top: 1px solid rgba(229, 9, 20, 0.2);
-            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
         }
         
         .stat-value {
             font-size: 1.8rem;
             font-weight: 700;
-            color: var(--red);
+            color: var(--accent);
             font-family: 'Montserrat', sans-serif;
         }
         
@@ -457,30 +483,14 @@ if ($user['parent_id']) {
             letter-spacing: 1px;
         }
         
-        .info-item {
-            text-align: left;
-            margin: 10px 0;
-        }
+        .info-item { text-align: left; margin: 10px 0; }
+        .info-label { color: var(--text-secondary); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; }
+        .info-value { color: var(--text-primary); font-size: 1rem; font-weight: 500; }
         
-        .info-label {
-            color: var(--text-secondary);
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        
-        .info-value {
-            color: #fff;
-            font-size: 1rem;
-            font-weight: 500;
-        }
-        
-        /* Main Content */
         .profile-content {
-            background: var(--card-gradient);
+            background: var(--card-bg);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            border: 1px solid var(--border-color);
             border-radius: 24px;
             padding: 30px;
         }
@@ -489,7 +499,7 @@ if ($user['parent_id']) {
             display: flex;
             gap: 10px;
             margin-bottom: 30px;
-            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
+            border-bottom: 1px solid var(--border-color);
             padding-bottom: 15px;
             flex-wrap: wrap;
         }
@@ -497,37 +507,20 @@ if ($user['parent_id']) {
         .tab-button {
             padding: 12px 25px;
             background: transparent;
-            border: 1px solid rgba(229, 9, 20, 0.3);
+            border: 1px solid var(--border-color);
             color: var(--text-primary);
             cursor: pointer;
             border-radius: 40px;
             font-weight: 600;
             transition: all 0.3s;
             text-transform: uppercase;
-            letter-spacing: 1px;
             font-size: 0.8rem;
         }
+        .tab-button:hover { border-color: var(--accent); color: var(--accent); background: rgba(var(--accent), 0.1); }
+        .tab-button.active { background: var(--accent); border-color: var(--accent); color: var(--bg-primary); }
         
-        .tab-button:hover {
-            border-color: var(--red);
-            color: var(--red);
-            background: rgba(229, 9, 20, 0.1);
-        }
-        
-        .tab-button.active {
-            background: var(--red);
-            border-color: var(--red);
-            color: #fff;
-        }
-        
-        .tab-pane {
-            display: none;
-            animation: fadeIn 0.3s ease;
-        }
-        
-        .tab-pane.active {
-            display: block;
-        }
+        .tab-pane { display: none; animation: fadeIn 0.3s ease; }
+        .tab-pane.active { display: block; }
         
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
@@ -535,13 +528,12 @@ if ($user['parent_id']) {
         }
         
         .tab-pane h2 {
-            color: var(--red);
+            color: var(--accent);
             font-size: 1.5rem;
             margin-bottom: 20px;
             position: relative;
             padding-bottom: 10px;
         }
-        
         .tab-pane h2::after {
             content: '';
             position: absolute;
@@ -549,75 +541,49 @@ if ($user['parent_id']) {
             left: 0;
             width: 60px;
             height: 3px;
-            background: var(--red);
-            border-radius: 3px;
+            background: var(--accent);
         }
         
-        /* Forms */
-        .form-group {
-            margin-bottom: 20px;
-        }
-        
+        .form-group { margin-bottom: 20px; }
         .form-group label {
             display: block;
-            margin-bottom: 5px;
-            color: var(--red);
+            color: var(--accent);
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 1px;
             font-size: 0.8rem;
+            margin-bottom: 5px;
         }
-        
         .form-group input {
             width: 100%;
             padding: 14px 18px;
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
             border-radius: 40px;
             color: var(--text-primary);
-            transition: all 0.3s;
             font-family: 'Inter', sans-serif;
         }
+        .form-group input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 20px var(--accent-glow); }
+        .form-group small { display: block; color: var(--text-secondary); font-size: 0.75rem; margin-top: 5px; }
         
-        .form-group input:focus {
-            border-color: var(--red);
-            outline: none;
-            box-shadow: 0 0 20px rgba(229, 9, 20, 0.2);
-        }
-        
-        .form-group small {
-            display: block;
-            color: var(--text-secondary);
-            font-size: 0.75rem;
-            margin-top: 5px;
-            padding-left: 15px;
-        }
-        
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         
         .btn-primary {
-            background: var(--red);
-            color: #fff;
+            background: var(--accent);
+            color: var(--bg-primary);
             border: none;
             font-family: 'Montserrat', sans-serif;
             font-weight: 600;
-            letter-spacing: 1px;
             text-transform: uppercase;
             font-size: 1rem;
             padding: 14px 30px;
             border-radius: 40px;
             transition: all 0.3s;
-            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
+            box-shadow: 0 5px 20px var(--accent-glow);
             cursor: pointer;
+            width: 100%;
             position: relative;
             overflow: hidden;
-            width: 100%;
         }
-        
         .btn-primary::before {
             content: '';
             position: absolute;
@@ -625,165 +591,93 @@ if ($user['parent_id']) {
             left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
             transition: left 0.5s;
         }
-        
-        .btn-primary:hover {
-            background: var(--red-dark);
-            transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(229, 9, 20, 0.4);
-        }
-        
-        .btn-primary:hover::before {
-            left: 100%;
-        }
+        .btn-primary:hover { background: var(--accent-dark); transform: translateY(-3px); box-shadow: 0 8px 30px var(--accent-glow); }
+        .btn-primary:hover::before { left: 100%; }
         
         .btn-link {
             display: inline-block;
             padding: 12px 25px;
             background: transparent;
-            border: 1px solid var(--red);
-            color: var(--red);
+            border: 1px solid var(--accent);
+            color: var(--accent);
             text-decoration: none;
             border-radius: 40px;
             font-weight: 600;
             transition: all 0.3s;
             font-size: 0.9rem;
         }
+        .btn-link:hover { background: var(--accent); color: var(--bg-primary); transform: translateY(-2px); box-shadow: 0 5px 20px var(--accent-glow); }
         
-        .btn-link:hover {
-            background: var(--red);
-            color: #fff;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
-        }
-        
-        /* Linked Accounts */
-        .linked-account-card {
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+        .profiles-list { display: grid; gap: 15px; margin: 20px 0; }
+        .profile-card {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
             border-radius: 16px;
-            padding: 15px;
-            margin-bottom: 15px;
+            padding: 15px 20px;
             display: flex;
             align-items: center;
             gap: 15px;
             transition: all 0.3s;
         }
-        
-        .linked-account-card:hover {
-            border-color: var(--red);
-            transform: translateX(5px);
-        }
-        
-        .linked-avatar {
+        .profile-card:hover { border-color: var(--accent); transform: translateX(5px); }
+        .profile-avatar-small {
             width: 50px;
             height: 50px;
             border-radius: 50%;
-            border: 2px solid var(--red);
-            object-fit: cover;
-        }
-        
-        .linked-avatar-placeholder {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background: rgba(229, 9, 20, 0.1);
-            border: 2px solid var(--red);
+            background: rgba(var(--accent), 0.1);
+            border: 2px solid var(--accent);
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--red);
-            font-weight: 700;
-            font-size: 1.2rem;
+            font-size: 1.5rem;
+            color: var(--accent);
+            overflow: hidden;
         }
-        
-        .account-info h4 {
-            color: var(--red);
-            margin-bottom: 5px;
-            font-size: 1.1rem;
+        .profile-avatar-small img { width: 100%; height: 100%; object-fit: cover; }
+        .profile-info-small { flex: 1; }
+        .profile-name-small { font-weight: 700; font-size: 1.1rem; color: var(--text-primary); }
+        .profile-type-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            margin-left: 10px;
         }
+        .badge-adult { background: rgba(229,9,20,0.2); color: #e50914; }
+        .badge-teen { background: rgba(255,193,7,0.2); color: #ffc107; }
+        .badge-kid { background: rgba(40,167,69,0.2); color: #28a745; }
         
-        .account-info p {
-            color: var(--text-secondary);
-            font-size: 0.85rem;
-        }
-        
-        /* Parent Notice */
-        .parent-notice {
-            background: rgba(229, 9, 20, 0.1);
-            border: 1px solid var(--red);
-            color: var(--text-primary);
-            padding: 15px 20px;
-            border-radius: 40px;
-            margin-bottom: 20px;
-            border-left: 4px solid var(--red);
-        }
-        
-        /* Alerts */
         .alert {
             padding: 18px 25px;
             margin-bottom: 20px;
             border-radius: 40px;
             animation: slideIn 0.3s ease;
-            background: rgba(10, 10, 10, 0.8);
+            background: rgba(10,10,10,0.8);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            border: 1px solid var(--border-color);
         }
-        
-        .alert-error {
-            border-left: 4px solid #ff4444;
-            color: #ff6b6b;
-        }
+        .alert-error { border-left: 4px solid #ff4444; color: #ff4444; }
         
         @keyframes slideIn {
-            from {
-                transform: translateY(-20px);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
         
-        /* Cinema Strip Divider */
-        .cinema-strip {
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
-            margin: 20px 0;
-            opacity: 0.3;
-        }
-        
-        /* Responsive */
-        @media (max-width: 1024px) {
-            .profile-container {
-                grid-template-columns: 1fr;
-            }
-        }
-        
+        @media (max-width: 1200px) { .nav-links a { padding: 5px 8px; font-size: 0.7rem; } }
+        @media (max-width: 1024px) { .nav-container { padding: 0 15px; } .profile-container { grid-template-columns: 1fr; } }
         @media (max-width: 768px) {
-            .nav-links {
-                display: none;
-            }
-            
-            h1 {
-                font-size: 2rem;
-            }
-            
-            .form-row {
-                grid-template-columns: 1fr;
-            }
-            
-            .tab-buttons {
-                flex-direction: column;
-            }
-            
-            .tab-button {
-                width: 100%;
-            }
+            .nav-container { flex-direction: column; gap: 10px; }
+            .nav-links { justify-content: center; }
+            .profile-badge { margin-left: 0; margin-top: 5px; }
+            .page-header { flex-direction: column; align-items: flex-start; }
+            h1 { font-size: 2rem; }
+            .form-row { grid-template-columns: 1fr; }
+            .tab-buttons { flex-direction: column; }
+            .tab-button { width: 100%; }
         }
     </style>
 </head>
@@ -798,15 +692,25 @@ if ($user['parent_id']) {
                 <a href="purchases.php">My Tickets</a>
                 <a href="profile.php" class="active">Profile</a>
                 <a href="settings.php">Settings</a>
+                <div class="profile-badge">
+                    <span>👤</span>
+                    <span class="profile-name"><?php echo htmlspecialchars($_SESSION['profile_name'] ?? 'Profile'); ?></span>
+                    <a href="select_profile.php" class="profile-switch">Switch</a>
+                </div>
                 <a href="../auth/logout.php">Logout</a>
             </div>
         </div>
     </nav>
     
     <main class="container">
-        <h1>My Profile</h1>
+        <div class="page-header">
+            <h1>My Profile</h1>
+            <div class="account-badge">
+                <span>Profile:</span> 
+                <strong><?php echo ucfirst($profile_type); ?></strong>
+            </div>
+        </div>
         
-        <!-- Cinema Strip Divider -->
         <div class="cinema-strip"></div>
         
         <?php if (!empty($errors)): ?>
@@ -819,11 +723,9 @@ if ($user['parent_id']) {
             </div>
         <?php endif; ?>
         
-        <!-- Parent notice for kids/teens -->
-        <?php if ($user['parent_id'] && $parent): ?>
-            <div class="parent-notice">
-                👤 Linked to parent: <strong><?php echo htmlspecialchars($parent['first_name'] . ' ' . $parent['last_name']); ?></strong>
-                (<?php echo htmlspecialchars($parent['email']); ?>)
+        <?php $flash = getFlash(); if ($flash): ?>
+            <div class="alert alert-<?php echo $flash['type']; ?>">
+                <?php echo htmlspecialchars($flash['message']); ?>
             </div>
         <?php endif; ?>
         
@@ -847,35 +749,17 @@ if ($user['parent_id']) {
                 
                 <div class="profile-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?></div>
                 <div class="profile-username">@<?php echo htmlspecialchars($user['username']); ?></div>
-                <div class="profile-badge"><?php echo strtoupper($user['account_type']); ?> ACCOUNT</div>
+                <div class="profile-badge-sidebar"><?php echo strtoupper($user['account_type']); ?> ACCOUNT</div>
                 
                 <div class="profile-stats">
-                    <div>
-                        <div class="stat-value"><?php echo $total_tickets; ?></div>
-                        <div class="stat-label">Total</div>
-                    </div>
-                    <div>
-                        <div class="stat-value"><?php echo $paid_tickets; ?></div>
-                        <div class="stat-label">Paid</div>
-                    </div>
-                    <div>
-                        <div class="stat-value">$<?php echo number_format($total_spent, 0); ?></div>
-                        <div class="stat-label">Spent</div>
-                    </div>
+                    <div><div class="stat-value"><?php echo $total_tickets; ?></div><div class="stat-label">Total</div></div>
+                    <div><div class="stat-value"><?php echo $paid_tickets; ?></div><div class="stat-label">Paid</div></div>
+                    <div><div class="stat-value">₱<?php echo number_format($total_spent, 2); ?></div><div class="stat-label">Spent</div></div>
                 </div>
                 
-                <div class="info-item">
-                    <div class="info-label">Email</div>
-                    <div class="info-value"><?php echo htmlspecialchars($user['email']); ?></div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Phone</div>
-                    <div class="info-value"><?php echo htmlspecialchars($user['phone'] ?? 'Not set'); ?></div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Member Since</div>
-                    <div class="info-value"><?php echo date('M d, Y', strtotime($user['created_at'])); ?></div>
-                </div>
+                <div class="info-item"><div class="info-label">Email</div><div class="info-value"><?php echo htmlspecialchars($user['email']); ?></div></div>
+                <div class="info-item"><div class="info-label">Phone</div><div class="info-value"><?php echo htmlspecialchars($user['phone'] ?? 'Not set'); ?></div></div>
+                <div class="info-item"><div class="info-label">Member Since</div><div class="info-value"><?php echo date('M d, Y', strtotime($user['created_at'])); ?></div></div>
             </div>
             
             <!-- Main Content -->
@@ -883,38 +767,19 @@ if ($user['parent_id']) {
                 <div class="tab-buttons">
                     <button class="tab-button active" onclick="showTab('edit-profile', this)">Edit Profile</button>
                     <button class="tab-button" onclick="showTab('change-password', this)">Change Password</button>
-                    <?php if ($user['account_type'] == 'adult'): ?>
-                        <button class="tab-button" onclick="showTab('linked-accounts', this)">Linked Accounts</button>
-                    <?php endif; ?>
+                    <button class="tab-button" onclick="showTab('profiles', this)">My Profiles</button>
                 </div>
                 
                 <!-- Edit Profile Tab -->
                 <div id="edit-profile" class="tab-pane active">
                     <h2>Edit Profile</h2>
-                    
                     <form method="POST">
                         <div class="form-row">
-                            <div class="form-group">
-                                <label>First Name</label>
-                                <input type="text" name="first_name" value="<?php echo htmlspecialchars($user['first_name']); ?>" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Last Name</label>
-                                <input type="text" name="last_name" value="<?php echo htmlspecialchars($user['last_name']); ?>" required>
-                            </div>
+                            <div class="form-group"><label>First Name</label><input type="text" name="first_name" value="<?php echo htmlspecialchars($user['first_name']); ?>" required></div>
+                            <div class="form-group"><label>Last Name</label><input type="text" name="last_name" value="<?php echo htmlspecialchars($user['last_name']); ?>" required></div>
                         </div>
-                        
-                        <div class="form-group">
-                            <label>Email</label>
-                            <input type="email" name="email" value="<?php echo htmlspecialchars($user['email']); ?>" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Phone Number</label>
-                            <input type="tel" name="phone" value="<?php echo htmlspecialchars(str_replace('+63', '', $user['phone'] ?? '')); ?>" placeholder="9123456789">
-                            <small>Enter 10 digits</small>
-                        </div>
-                        
+                        <div class="form-group"><label>Email</label><input type="email" name="email" value="<?php echo htmlspecialchars($user['email']); ?>" required></div>
+                        <div class="form-group"><label>Phone Number</label><input type="tel" name="phone" value="<?php echo htmlspecialchars(str_replace('+63', '', $user['phone'] ?? '')); ?>" placeholder="9123456789"><small>Enter 10 digits</small></div>
                         <button type="submit" name="update_profile" class="btn-primary">Update Profile</button>
                     </form>
                 </div>
@@ -922,59 +787,58 @@ if ($user['parent_id']) {
                 <!-- Change Password Tab -->
                 <div id="change-password" class="tab-pane">
                     <h2>Change Password</h2>
-                    
                     <form method="POST">
-                        <div class="form-group">
-                            <label>Current Password</label>
-                            <input type="password" name="current_password" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>New Password</label>
-                            <input type="password" name="new_password" required>
-                            <small>Minimum 6 characters</small>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Confirm New Password</label>
-                            <input type="password" name="confirm_password" required>
-                        </div>
-                        
+                        <div class="form-group"><label>Current Password</label><input type="password" name="current_password" required></div>
+                        <div class="form-group"><label>New Password</label><input type="password" name="new_password" required><small>Minimum 6 characters</small></div>
+                        <div class="form-group"><label>Confirm New Password</label><input type="password" name="confirm_password" required></div>
                         <button type="submit" name="change_password" class="btn-primary">Change Password</button>
                     </form>
                 </div>
                 
-                <!-- Linked Accounts Tab (Adults Only) -->
-                <?php if ($user['account_type'] == 'adult'): ?>
-                    <div id="linked-accounts" class="tab-pane">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:15px;">
-                            <h2 style="margin:0;">Linked Family Accounts</h2>
-                            <a href="../auth/link_account.php" class="btn-link">➕ Add Linked Account</a>
-                        </div>
-                        
-                        <?php if (empty($linked_accounts)): ?>
-                            <p style="color:var(--text-secondary);">No linked accounts yet. Click "Add Linked Account" to create accounts for your children.</p>
-                        <?php else: ?>
-                            <?php foreach ($linked_accounts as $account): ?>
-                                <div class="linked-account-card">
-                                    <?php if ($account['profile_pic']): ?>
-                                        <img src="../uploads/profiles/<?php echo $account['profile_pic']; ?>" class="linked-avatar">
-                                    <?php else: ?>
-                                        <div class="linked-avatar-placeholder">
-                                            <?php echo strtoupper(substr($account['first_name'],0,1) . substr($account['last_name'],0,1)); ?>
+                <!-- My Profiles Tab -->
+                <div id="profiles" class="tab-pane">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
+                        <h2 style="margin: 0;">My Profiles</h2>
+                        <a href="manage_profiles.php" class="btn-link">➕ Manage Profiles</a>
+                    </div>
+                    <p style="color: var(--text-secondary); margin-bottom: 20px;">You can have up to 5 profiles on your account. Each profile has its own watch history and recommendations.</p>
+                    
+                    <?php
+                    $stmt = $pdo->prepare("SELECT * FROM user_profiles WHERE user_id = ? ORDER BY profile_type, profile_name");
+                    $stmt->execute([$user['id']]);
+                    $user_profiles = $stmt->fetchAll();
+                    ?>
+                    
+                    <?php if (empty($user_profiles)): ?>
+                        <div style="text-align: center; padding: 40px; color: var(--text-secondary);">No profiles found. Click "Manage Profiles" to create your first profile.</div>
+                    <?php else: ?>
+                        <div class="profiles-list">
+                            <?php foreach ($user_profiles as $profile): 
+                                $avatar_path = getProfileAvatarImage($profile['avatar']);
+                            ?>
+                                <div class="profile-card">
+                                    <div class="profile-avatar-small">
+                                        <?php if ($avatar_path): ?>
+                                            <img src="<?php echo $avatar_path; ?>" alt="<?php echo htmlspecialchars($profile['profile_name']); ?>">
+                                        <?php else: ?>
+                                            <?php if ($profile['profile_type'] == 'adult') echo '🎬'; elseif ($profile['profile_type'] == 'teen') echo '🎮'; else echo '🧸'; ?>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="profile-info-small">
+                                        <div class="profile-name-small">
+                                            <?php echo htmlspecialchars($profile['profile_name']); ?>
+                                            <span class="profile-type-badge badge-<?php echo $profile['profile_type']; ?>"><?php echo ucfirst($profile['profile_type']); ?></span>
                                         </div>
-                                    <?php endif; ?>
-                                    
-                                    <div class="account-info">
-                                        <h4><?php echo htmlspecialchars($account['first_name'] . ' ' . $account['last_name']); ?></h4>
-                                        <p>@<?php echo htmlspecialchars($account['username']); ?> • <?php echo strtoupper($account['account_type']); ?></p>
-                                        <p>Joined: <?php echo date('M d, Y', strtotime($account['created_at'])); ?></p>
+                                        <div style="font-size: 0.8rem; color: var(--text-secondary);">
+                                            <?php if ($profile['pin']): ?>🔒 PIN protected<?php else: ?>No PIN set<?php endif; ?>
+                                        </div>
                                     </div>
                                 </div>
                             <?php endforeach; ?>
-                        <?php endif; ?>
-                    </div>
-                <?php endif; ?>
+                        </div>
+                        <div style="margin-top: 20px; text-align: center;"><a href="manage_profiles.php" class="btn-primary" style="display: inline-block; width: auto; padding: 12px 30px;">Manage All Profiles</a></div>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
     </main>
@@ -983,7 +847,6 @@ if ($user['parent_id']) {
         function showTab(tabId, element) {
             document.querySelectorAll('.tab-pane').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-            
             document.getElementById(tabId).classList.add('active');
             element.classList.add('active');
         }

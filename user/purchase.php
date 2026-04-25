@@ -1,14 +1,23 @@
 <?php
-// user/purchase.php - COMPLETE FIXED VERSION
+// user/purchase.php - FIXED: Uses profile_type from session, no parent_id
+// FIXED: Added generateSeatMap function, fixed undefined variables
+// Removed quantity dropdown (1 ticket per person)
 require_once '../includes/functions.php';
 requireLogin();
 
 $pdo = getDB();
 $user = getCurrentUser();
 
-// Check if user is kid (cannot purchase)
-if ($user['account_type'] == 'kid') {
-    setFlash('Kid accounts cannot purchase tickets. Please ask a parent/guardian.', 'error');
+// Get profile_type from session (NOT from user account_type)
+$profile_type = $_SESSION['profile_type'] ?? 'adult';
+
+// Get current theme
+$current_theme = $user['theme_preference'] ?? 'dark';
+
+// ============ CHECK PROFILE TYPE FOR PURCHASE RESTRICTIONS ============
+// Kid profiles cannot purchase tickets
+if ($profile_type == 'kid') {
+    setFlash('Kid profiles cannot purchase tickets directly. Please ask a parent or guardian to buy tickets for you.', 'error');
     header('Location: movies.php');
     exit;
 }
@@ -17,13 +26,41 @@ $screening_id = isset($_GET['screening_id']) ? intval($_GET['screening_id']) : 0
 $movie_id = isset($_GET['movie_id']) ? intval($_GET['movie_id']) : 0;
 $type = isset($_GET['type']) ? $_GET['type'] : '';
 
-$processing_fee = 3.00; // ₱150 = ~$3.00
+// Use constants from functions.php
+$processing_fee_cinema = TICKET_FEE; // ₱50
+$processing_fee_online = TICKET_FEE; // ₱50
+
+// ========== CHECK IF USER ALREADY BOUGHT A TICKET ==========
+function hasUserAlreadyPurchased($pdo, $user_id, $screening_id) {
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) FROM tickets 
+        WHERE user_id = ? AND screening_id = ? AND status IN ('paid', 'pending')
+    ");
+    $stmt->execute([$user_id, $screening_id]);
+    return $stmt->fetchColumn() > 0;
+}
+
+// Initialize variables
+$ticket_type = '';
+$base_price = 0;
+$item_name = '';
+$cinema_name = '';
+$location = '';
+$screen_number = '';
+$show_date = '';
+$show_time = '';
+$duration = '';
+$rating = '';
+$poster = '';
+$available_seats = 0;
+$seats = []; // Initialize seats array
+$online_schedules = []; // Initialize online_schedules array
 
 if ($screening_id) {
     // Get screening details for physical ticket
     $stmt = $pdo->prepare("
         SELECT s.*, m.title, m.description, m.poster, m.duration, m.rating, m.genre,
-               c.name as cinema_name, c.location
+               c.name as cinema_name, c.location, c.seats_per_screen
         FROM screenings s
         JOIN movies m ON s.movie_id = m.id
         JOIN cinemas c ON s.cinema_id = c.id
@@ -34,6 +71,13 @@ if ($screening_id) {
     
     if (!$screening) {
         setFlash('Screening not found or expired', 'error');
+        header('Location: movies.php');
+        exit;
+    }
+    
+    // Check if user already purchased a ticket for this screening
+    if (hasUserAlreadyPurchased($pdo, $user['id'], $screening_id)) {
+        setFlash('You have already purchased a ticket for this screening. One ticket per person only.', 'error');
         header('Location: movies.php');
         exit;
     }
@@ -51,7 +95,7 @@ if ($screening_id) {
     $poster = $screening['poster'];
     $available_seats = $screening['available_seats'];
     
-    // Generate seat map
+    // Generate seat map using the function from functions.php
     $seats = generateSeatMap($screening_id);
     
 } elseif ($movie_id && $type == 'online') {
@@ -66,8 +110,13 @@ if ($screening_id) {
         exit;
     }
     
-    // Check age restriction
-    if ($user['account_type'] == 'teen' && !in_array($movie['rating'], ['G', 'PG', 'PG-13'])) {
+    // Check age restriction based on PROFILE_TYPE
+    if ($profile_type == 'teen' && !in_array($movie['rating'], ['G', 'PG', 'PG-13'])) {
+        setFlash('This movie is not available for your age group', 'error');
+        header('Location: movies.php');
+        exit;
+    }
+    if ($profile_type == 'kid' && !in_array($movie['rating'], ['G', 'PG'])) {
         setFlash('This movie is not available for your age group', 'error');
         header('Location: movies.php');
         exit;
@@ -106,32 +155,25 @@ if ($screening_id) {
 
 // Handle form submission for physical tickets
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && $ticket_type == 'physical') {
-    $quantity = intval($_POST['quantity'] ?? 1);
+    $quantity = 1;
     $selected_seats = isset($_POST['seats']) ? explode(',', $_POST['seats']) : [];
     $for_user_id = $_POST['for_user_id'] ?? $user['id'];
     
-    // Calculate total with processing fee
     $subtotal = $base_price * $quantity;
-    $total_fee = $processing_fee * $quantity;
+    $total_fee = $processing_fee_cinema * $quantity;
     $total_price = $subtotal + $total_fee;
     
-    // Validate
     $errors = [];
     
-    if ($quantity < 1 || $quantity > 10) {
-        $errors[] = 'Invalid quantity';
-    }
-    
     if ($available_seats < $quantity) {
-        $errors[] = 'Not enough seats available! Only ' . $available_seats . ' left.';
+        $errors[] = 'Not enough seats available!';
     }
     
     if (empty($selected_seats)) {
-        $errors[] = 'Please select your seats';
+        $errors[] = 'Please select your seat';
     } elseif (count($selected_seats) != $quantity) {
-        $errors[] = 'Please select exactly ' . $quantity . ' seat(s)';
+        $errors[] = 'Please select exactly 1 seat';
     } else {
-        // Check if seats are still available
         $stmt = $pdo->prepare("SELECT seat_numbers FROM tickets WHERE screening_id = ? AND status IN ('paid', 'pending')");
         $stmt->execute([$screening_id]);
         $booked_seats = [];
@@ -143,29 +185,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && $ticket_type == 'physical') {
         
         $conflicts = array_intersect($selected_seats, $booked_seats);
         if (!empty($conflicts)) {
-            $errors[] = 'Some seats are no longer available: ' . implode(', ', $conflicts);
+            $errors[] = 'This seat is no longer available: ' . implode(', ', $conflicts);
         }
     }
     
     if (empty($errors)) {
-        // Redirect to payment
         $seats_param = implode(',', $selected_seats);
-        header("Location: payment.php?screening_id={$screening_id}&quantity={$quantity}&seats={$seats_param}" . 
-               ($for_user_id != $user['id'] ? "&for_user_id={$for_user_id}" : ""));
+        header("Location: payment.php?type=cinema&id={$screening_id}&quantity=1&seats={$seats_param}" . 
+            ($for_user_id != $user['id'] ? "&for_user_id={$for_user_id}" : ""));
         exit;
+    } else {
+        foreach ($errors as $error) {
+            setFlash($error, 'error');
+        }
     }
 }
 
-// Get user's linked accounts (for adults)
+// Get user's linked child accounts (for adults) - feature disabled
 $linked_accounts = [];
-if ($user['account_type'] == 'adult') {
-    $stmt = $pdo->prepare("SELECT id, first_name, last_name, account_type FROM users WHERE parent_id = ?");
-    $stmt->execute([$user['id']]);
-    $linked_accounts = $stmt->fetchAll();
-}
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<?php echo $current_theme; ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -173,35 +213,81 @@ if ($user['account_type'] == 'adult') {
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --black: #0a0a0a;
-            --deep-gray: #1a1a1a;
-            --medium-gray: #2a2a2a;
-            --light-gray: #333333;
-            --red: #e50914;
-            --red-dark: #b2070f;
-            --red-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+        :root[data-theme="dark"] {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #2a2a2a;
             --text-primary: #ffffff;
             --text-secondary: #b3b3b3;
+            --accent: #e50914;
+            --accent-dark: #b2070f;
+            --accent-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+            --border-color: rgba(229, 9, 20, 0.2);
+            --card-bg: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
             --glass-bg: rgba(26, 26, 26, 0.7);
             --glass-border: rgba(255, 255, 255, 0.05);
-            --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
+            --success-color: #44ff44;
+            --warning-color: #ffff44;
         }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+
+        :root[data-theme="light"] {
+            --bg-primary: #f5f5f5;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #e0e0e0;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --accent: #e50914;
+            --accent-dark: #b2070f;
+            --accent-glow: 0 0 20px rgba(229, 9, 20, 0.2);
+            --border-color: rgba(229, 9, 20, 0.2);
+            --card-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(240, 240, 240, 0.95) 100%);
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(229, 9, 20, 0.1);
+            --success-color: #00aa00;
+            --warning-color: #cc8800;
         }
+
+        :root[data-theme="neon"] {
+            --bg-primary: #0a0a2a;
+            --bg-secondary: #1a1a3a;
+            --bg-tertiary: #2a2a4a;
+            --text-primary: #00ffff;
+            --text-secondary: #ff00ff;
+            --accent: #ff00ff;
+            --accent-dark: #cc00cc;
+            --accent-glow: 0 0 20px rgba(255, 0, 255, 0.5);
+            --border-color: rgba(255, 0, 255, 0.3);
+            --card-bg: linear-gradient(135deg, rgba(26, 26, 58, 0.9) 0%, rgba(20, 20, 50, 0.95) 100%);
+            --glass-bg: rgba(26, 26, 58, 0.7);
+            --glass-border: rgba(255, 0, 255, 0.2);
+            --success-color: #00ffff;
+            --warning-color: #ffff00;
+        }
+
+        :root[data-theme="matrix"] {
+            --bg-primary: #000000;
+            --bg-secondary: #0a1a0a;
+            --bg-tertiary: #0f2a0f;
+            --text-primary: #00ff00;
+            --text-secondary: #00aa00;
+            --accent: #00ff00;
+            --accent-dark: #00aa00;
+            --accent-glow: 0 0 20px rgba(0, 255, 0, 0.5);
+            --border-color: rgba(0, 255, 0, 0.3);
+            --card-bg: linear-gradient(135deg, rgba(10, 26, 10, 0.9) 0%, rgba(5, 20, 5, 0.95) 100%);
+            --glass-bg: rgba(10, 26, 10, 0.7);
+            --glass-border: rgba(0, 255, 0, 0.2);
+            --success-color: #00ff00;
+            --warning-color: #ffff00;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
-            background: var(--black);
+            background: var(--bg-primary);
             color: var(--text-primary);
             font-family: 'Inter', sans-serif;
-            font-weight: 400;
-            line-height: 1.6;
-            min-height: 100vh;
-            position: relative;
+            transition: background-color 0.3s ease;
         }
         
         body::before {
@@ -211,75 +297,59 @@ if ($user['account_type'] == 'adult') {
             left: 0;
             right: 0;
             bottom: 0;
-            background: radial-gradient(circle at 20% 50%, rgba(229, 9, 20, 0.03) 0%, transparent 50%),
-                        radial-gradient(circle at 80% 80%, rgba(229, 9, 20, 0.03) 0%, transparent 50%);
+            background: radial-gradient(circle at 20% 50%, var(--accent) 0%, transparent 50%);
+            opacity: 0.03;
             pointer-events: none;
             z-index: -1;
         }
         
-        /* Navigation */
         .navbar {
-            background: rgba(10, 10, 10, 0.95);
+            background: rgba(var(--bg-secondary), 0.95);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.8rem 0;
             position: sticky;
             top: 0;
             z-index: 1000;
         }
         
         .nav-container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 20px;
         }
         
         .logo {
-            color: var(--red);
-            font-size: 1.8rem;
+            color: var(--accent);
+            font-size: 1.5rem;
             font-weight: 800;
             font-family: 'Montserrat', sans-serif;
             text-decoration: none;
             text-transform: uppercase;
-            letter-spacing: 2px;
-            position: relative;
-            transition: all 0.3s;
+            letter-spacing: 1.5px;
+            white-space: nowrap;
         }
         
-        .logo:hover {
-            text-shadow: var(--red-glow);
-        }
+        .logo:hover { text-shadow: var(--accent-glow); }
+        .logo::before { content: "🎬"; margin-right: 8px; font-size: 1.2rem; filter: drop-shadow(0 0 5px var(--accent)); }
         
-        .logo::before {
-            content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
-            filter: drop-shadow(0 0 5px var(--red));
-        }
-        
-        .nav-links {
-            display: flex;
-            gap: 25px;
-            align-items: center;
-        }
-        
+        .nav-links { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             transition: all 0.3s;
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             position: relative;
+            white-space: nowrap;
         }
-        
         .nav-links a::after {
             content: '';
             position: absolute;
@@ -288,44 +358,32 @@ if ($user['account_type'] == 'adult') {
             transform: translateX(-50%);
             width: 0;
             height: 2px;
-            background: var(--red);
+            background: var(--accent);
             transition: width 0.3s;
         }
+        .nav-links a:hover { color: var(--accent); }
+        .nav-links a:hover::after { width: 60%; }
+        .nav-links a.active { color: var(--accent); }
         
-        .nav-links a:hover {
-            color: var(--red);
+        .profile-switch {
+            background: rgba(229, 9, 20, 0.15);
+            border: 1px solid #e50914;
+            border-radius: 40px;
+            padding: 6px 15px !important;
+            margin-left: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
+        .profile-switch:hover { background: #e50914; color: white !important; }
         
-        .nav-links a:hover::after {
-            width: 60%;
-        }
+        .container { max-width: 1600px; margin: 0 auto; padding: 30px 20px; }
+        .purchase-container { max-width: 1200px; margin: 0 auto; }
         
-        .nav-links a.active {
-            color: var(--red);
-        }
-        
-        .nav-links a.active::after {
-            width: 60%;
-        }
-        
-        /* Main Container */
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 30px;
-        }
-        
-        .purchase-container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        
-        /* Movie Summary */
         .movie-summary {
-            background: var(--card-gradient);
+            background: var(--card-bg);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            border: 1px solid var(--border-color);
             border-radius: 24px;
             padding: 25px;
             margin-bottom: 30px;
@@ -342,7 +400,7 @@ if ($user['account_type'] == 'adult') {
             left: 0;
             right: 0;
             height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
             animation: slideBorder 3s infinite;
         }
         
@@ -356,18 +414,12 @@ if ($user['account_type'] == 'adult') {
             width: 120px;
             height: 170px;
             object-fit: cover;
-            border: 2px solid rgba(229, 9, 20, 0.3);
+            border: 2px solid var(--border-color);
             border-radius: 12px;
-            transition: all 0.3s;
-        }
-        
-        .summary-poster:hover {
-            border-color: var(--red);
-            transform: scale(1.05);
         }
         
         .summary-details h1 {
-            color: var(--red);
+            color: var(--accent);
             font-size: 2rem;
             margin-bottom: 15px;
             font-family: 'Montserrat', sans-serif;
@@ -387,41 +439,14 @@ if ($user['account_type'] == 'adult') {
             font-weight: 600;
             font-size: 0.9rem;
         }
+        .rating-G { background: rgba(68,255,68,0.15); border: 1px solid var(--success-color); color: var(--success-color); }
+        .rating-PG { background: rgba(255,255,68,0.15); border: 1px solid #ffff44; color: #ffff44; }
+        .rating-PG-13 { background: rgba(255,136,68,0.15); border: 1px solid #ff8844; color: #ff8844; }
+        .rating-R { background: rgba(229,9,20,0.15); border: 1px solid var(--accent); color: var(--accent); }
         
-        .rating-G {
-            background: rgba(68, 255, 68, 0.15);
-            border: 1px solid #44ff44;
-            color: #44ff44;
-        }
+        .location-info { color: var(--text-secondary); line-height: 1.8; }
+        .location-info strong { color: var(--accent); }
         
-        .rating-PG {
-            background: rgba(255, 255, 68, 0.15);
-            border: 1px solid #ffff44;
-            color: #ffff44;
-        }
-        
-        .rating-PG-13 {
-            background: rgba(255, 136, 68, 0.15);
-            border: 1px solid #ff8844;
-            color: #ff8844;
-        }
-        
-        .rating-R {
-            background: rgba(229, 9, 20, 0.15);
-            border: 1px solid var(--red);
-            color: var(--red);
-        }
-        
-        .location-info {
-            color: var(--text-secondary);
-            line-height: 1.8;
-        }
-        
-        .location-info strong {
-            color: var(--red);
-        }
-        
-        /* Online Schedule */
         .schedule-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -430,10 +455,9 @@ if ($user['account_type'] == 'adult') {
         }
         
         .schedule-card {
-            background: var(--card-gradient);
+            background: var(--card-bg);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.1);
+            border: 1px solid var(--border-color);
             border-radius: 16px;
             padding: 20px;
             cursor: pointer;
@@ -449,103 +473,45 @@ if ($user['account_type'] == 'adult') {
             left: 0;
             right: 0;
             height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
             transform: translateX(-100%);
             animation: slideBorder 3s infinite;
         }
         
-        .schedule-card:hover {
-            transform: translateY(-5px);
-            border-color: rgba(229, 9, 20, 0.3);
-            box-shadow: 0 20px 40px rgba(229, 9, 20, 0.15);
-        }
+        .schedule-card:hover { transform: translateY(-5px); border-color: var(--accent); box-shadow: 0 20px 40px var(--accent-glow); }
+        .schedule-card.selected { background: rgba(var(--accent), 0.15); border: 2px solid var(--accent); }
         
-        .schedule-card.selected {
-            background: rgba(229, 9, 20, 0.15);
-            border: 2px solid var(--red);
-        }
+        .schedule-time { font-size: 1.3rem; color: var(--accent); font-weight: 700; margin-bottom: 10px; }
+        .schedule-date { color: var(--text-secondary); margin-bottom: 10px; }
+        .availability { color: var(--success-color); margin: 10px 0; font-weight: 600; }
+        .availability.warning { color: var(--warning-color); }
+        .schedule-price { font-size: 1.2rem; color: var(--accent); font-weight: 700; margin: 15px 0; }
         
-        .schedule-time {
-            font-size: 1.3rem;
-            color: var(--red);
-            font-weight: 700;
-            margin-bottom: 10px;
-        }
-        
-        .schedule-date {
-            color: var(--text-secondary);
-            margin-bottom: 10px;
-        }
-        
-        .availability {
-            color: #44ff44;
-            margin: 10px 0;
-            font-weight: 600;
-        }
-        
-        .availability.warning {
-            color: #ffff44;
-        }
-        
-        .schedule-price {
-            font-size: 1.2rem;
-            color: var(--red);
-            font-weight: 700;
-            margin: 15px 0;
-        }
-        
-        /* Online Benefits */
         .online-benefits {
-            background: rgba(229, 9, 20, 0.05);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            background: rgba(var(--accent), 0.05);
+            border: 1px solid var(--border-color);
             border-radius: 16px;
             padding: 20px;
             margin: 20px 0;
         }
+        .online-benefits h3 { color: var(--accent); margin-bottom: 15px; }
+        .online-benefits ul { list-style: none; padding: 0; }
+        .online-benefits li { color: var(--text-secondary); margin: 10px 0; padding-left: 25px; position: relative; }
+        .online-benefits li:before { content: "✓"; color: var(--accent); position: absolute; left: 0; font-weight: 700; }
         
-        .online-benefits h3 {
-            color: var(--red);
-            margin-bottom: 15px;
-        }
-        
-        .online-benefits ul {
-            list-style: none;
-            padding: 0;
-        }
-        
-        .online-benefits li {
-            color: var(--text-secondary);
-            margin: 10px 0;
-            padding-left: 25px;
-            position: relative;
-        }
-        
-        .online-benefits li:before {
-            content: "✓";
-            color: var(--red);
-            position: absolute;
-            left: 0;
-            font-weight: 700;
-        }
-        
-        /* Seat Selection */
         .seat-selection {
-            background: var(--card-gradient);
+            background: var(--card-bg);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            border: 1px solid var(--border-color);
             border-radius: 24px;
             padding: 30px;
             margin: 30px 0;
         }
         
-        .seat-selection h2 {
-            color: var(--red);
-            margin-bottom: 20px;
-        }
+        .seat-selection h2 { color: var(--accent); margin-bottom: 20px; }
         
         .screen {
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
             height: 5px;
             width: 80%;
             margin: 0 auto 50px;
@@ -564,7 +530,7 @@ if ($user['account_type'] == 'adult') {
         
         .seat {
             aspect-ratio: 1;
-            border: 2px solid rgba(255, 255, 255, 0.1);
+            border: 2px solid var(--border-color);
             border-radius: 8px;
             display: flex;
             align-items: center;
@@ -576,165 +542,91 @@ if ($user['account_type'] == 'adult') {
             color: var(--text-secondary);
         }
         
-        .seat.available:hover {
-            border-color: var(--red);
-            color: var(--red);
-            transform: scale(1.1);
-            box-shadow: 0 0 20px rgba(229, 9, 20, 0.3);
-        }
+        .seat.available:hover { border-color: var(--accent); color: var(--accent); transform: scale(1.1); box-shadow: 0 0 20px var(--accent-glow); }
+        .seat.selected { background: var(--accent); border-color: var(--accent); color: var(--bg-primary); transform: scale(1.05); }
+        .seat.booked { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.05); color: rgba(255,255,255,0.2); cursor: not-allowed; text-decoration: line-through; }
         
-        .seat.selected {
-            background: var(--red);
-            border-color: var(--red);
-            color: #fff;
-            transform: scale(1.05);
-        }
-        
-        .seat.booked {
-            background: rgba(255, 255, 255, 0.05);
-            border-color: rgba(255, 255, 255, 0.05);
-            color: rgba(255, 255, 255, 0.2);
-            cursor: not-allowed;
-            text-decoration: line-through;
-        }
-        
-        /* Legend */
         .legend {
             display: flex;
             justify-content: center;
             gap: 30px;
             margin: 20px 0 30px;
         }
+        .legend-item { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); }
+        .legend-box { width: 20px; height: 20px; border: 2px solid; border-radius: 4px; }
+        .legend-box.available { border-color: var(--border-color); }
+        .legend-box.selected { background: var(--accent); border-color: var(--accent); }
+        .legend-box.booked { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); }
         
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--text-secondary);
-        }
-        
-        .legend-box {
-            width: 20px;
-            height: 20px;
-            border: 2px solid;
-            border-radius: 4px;
-        }
-        
-        .legend-box.available { border-color: rgba(255, 255, 255, 0.3); }
-        .legend-box.selected { background: var(--red); border-color: var(--red); }
-        .legend-box.booked { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.1); }
-        
-        /* Selected Info */
         .selected-info {
             margin: 20px 0;
             padding: 15px;
-            background: rgba(0, 0, 0, 0.3);
+            background: rgba(0,0,0,0.3);
             border-radius: 40px;
-            color: var(--red);
+            color: var(--accent);
             text-align: center;
             font-weight: 600;
         }
+        .selected-info span { color: var(--text-primary); }
         
-        .selected-info span {
-            color: #fff;
-        }
-        
-        /* Purchase Form */
         .purchase-form {
-            background: var(--card-gradient);
+            background: var(--card-bg);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            border: 1px solid var(--border-color);
             border-radius: 24px;
             padding: 30px;
             margin-top: 30px;
         }
         
-        .purchase-form h2 {
-            color: var(--red);
-            margin-bottom: 20px;
-        }
+        .purchase-form h2 { color: var(--accent); margin-bottom: 20px; }
         
-        .form-group {
-            margin-bottom: 20px;
-        }
-        
+        .form-group { margin-bottom: 20px; }
         .form-group label {
             display: block;
-            color: var(--red);
+            color: var(--accent);
             margin-bottom: 8px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 1px;
             font-size: 0.8rem;
         }
-        
-        .form-group select,
-        .form-group input {
+        .form-group select, .form-group input {
             width: 100%;
             padding: 14px 18px;
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
             color: var(--text-primary);
             border-radius: 40px;
             font-family: 'Inter', sans-serif;
-            transition: all 0.3s;
         }
+        .form-group select:focus, .form-group input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 20px var(--accent-glow); }
         
-        .form-group select:focus,
-        .form-group input:focus {
-            border-color: var(--red);
-            outline: none;
-            box-shadow: 0 0 20px rgba(229, 9, 20, 0.2);
-        }
-        
-        /* Price Breakdown */
         .price-breakdown {
-            background: rgba(0, 0, 0, 0.3);
+            background: rgba(0,0,0,0.3);
             border-radius: 16px;
             padding: 20px;
             margin: 20px 0;
         }
+        .price-row { display: flex; justify-content: space-between; margin: 10px 0; color: var(--text-secondary); }
+        .price-row.total { margin-top: 15px; padding-top: 15px; border-top: 2px solid var(--accent); color: var(--accent); font-size: 1.3rem; font-weight: 700; }
+        .price-row span:last-child { color: var(--accent); font-weight: 600; }
         
-        .price-row {
-            display: flex;
-            justify-content: space-between;
-            margin: 10px 0;
-            color: var(--text-secondary);
-        }
-        
-        .price-row.total {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 2px solid var(--red);
-            color: var(--red);
-            font-size: 1.3rem;
-            font-weight: 700;
-        }
-        
-        .price-row span:last-child {
-            color: var(--red);
-            font-weight: 600;
-        }
-        
-        /* Proceed Button */
         .proceed-btn {
             width: 100%;
             padding: 16px;
-            background: var(--red);
-            color: #fff;
+            background: var(--accent);
+            color: var(--bg-primary);
             border: none;
             border-radius: 40px;
             font-size: 1.2rem;
             font-weight: 700;
             cursor: pointer;
             transition: all 0.3s;
-            position: relative;
-            overflow: hidden;
             text-transform: uppercase;
             letter-spacing: 2px;
+            position: relative;
+            overflow: hidden;
         }
-        
         .proceed-btn::before {
             content: '';
             position: absolute;
@@ -742,57 +634,40 @@ if ($user['account_type'] == 'adult') {
             left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
             transition: left 0.5s;
         }
+        .proceed-btn:hover:not(:disabled) { background: var(--accent-dark); transform: translateY(-3px); box-shadow: 0 10px 30px var(--accent-glow); }
+        .proceed-btn:hover:not(:disabled)::before { left: 100%; }
+        .proceed-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
-        .proceed-btn:hover:not(:disabled) {
-            background: var(--red-dark);
-            transform: translateY(-3px);
-            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.4);
+        .cinema-strip { height: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); margin: 20px 0; opacity: 0.3; }
+        
+        .alert {
+            padding: 18px 25px;
+            margin-bottom: 20px;
+            border-radius: 40px;
+            animation: slideIn 0.3s ease;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--accent);
+            color: var(--text-primary);
         }
         
-        .proceed-btn:hover:not(:disabled)::before {
-            left: 100%;
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
         
-        .proceed-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        /* Cinema Strip Divider */
-        .cinema-strip {
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
-            margin: 20px 0;
-            opacity: 0.3;
-        }
-        
-        /* Responsive */
+        @media (max-width: 1200px) { .nav-links a { padding: 5px 8px; font-size: 0.7rem; } }
+        @media (max-width: 1024px) { .nav-container { padding: 0 15px; } }
         @media (max-width: 768px) {
-            .nav-links {
-                display: none;
-            }
-            
-            .movie-summary {
-                flex-direction: column;
-                align-items: center;
-                text-align: center;
-            }
-            
-            .meta-info {
-                justify-content: center;
-            }
-            
-            .seat-map {
-                grid-template-columns: repeat(4, 1fr);
-            }
-            
-            .legend {
-                flex-direction: column;
-                align-items: center;
-            }
+            .nav-container { flex-direction: column; gap: 10px; }
+            .nav-links { justify-content: center; }
+            .movie-summary { flex-direction: column; align-items: center; text-align: center; }
+            .meta-info { justify-content: center; }
+            .seat-map { grid-template-columns: repeat(4, 1fr); }
+            .legend { flex-direction: column; align-items: center; }
         }
     </style>
 </head>
@@ -801,40 +676,47 @@ if ($user['account_type'] == 'adult') {
         <div class="nav-container">
             <a href="../index.php" class="logo">CINEMA TICKET</a>
             <div class="nav-links">
-                <a href="movies.php">Movies</a>
+                <a href="movies.php" class="active">Movies</a>
                 <a href="favorites.php">Favorites</a>
                 <a href="history.php">History</a>
                 <a href="purchases.php">My Tickets</a>
                 <a href="profile.php">Profile</a>
                 <a href="settings.php">Settings</a>
+                <div class="profile-badge">
+                    <span>👤</span>
+                    <span class="profile-name"><?php echo htmlspecialchars($_SESSION['profile_name'] ?? 'Profile'); ?></span>
+                    <a href="select_profile.php" class="profile-switch">Switch</a>
+                </div>
                 <a href="../auth/logout.php">Logout</a>
             </div>
         </div>
     </nav>
     
     <main class="container purchase-container">
+        <?php $flash = getFlash(); if ($flash): ?>
+            <div class="alert alert-<?php echo $flash['type']; ?>"><?php echo htmlspecialchars($flash['message']); ?></div>
+        <?php endif; ?>
+        
         <!-- Movie Summary -->
         <div class="movie-summary">
-            <?php if ($poster): ?>
-                <img src="../uploads/posters/<?php echo $poster; ?>" 
-                     alt="<?php echo htmlspecialchars($item_name); ?>" 
-                     class="summary-poster">
+            <?php if (!empty($poster)): ?>
+                <img src="../uploads/posters/<?php echo htmlspecialchars($poster); ?>" class="summary-poster" onerror="this.src='../uploads/posters/default.jpg'">
             <?php else: ?>
-                <div style="width:120px; height:170px; background:var(--deep-gray); border:2px solid rgba(229,9,20,0.3); border-radius:12px; display:flex; align-items:center; justify-content:center; color:var(--text-secondary);">
-                    No Poster
-                </div>
+                <div style="width:120px; height:170px; background:var(--bg-tertiary); border:2px solid var(--border-color); border-radius:12px; display:flex; align-items:center; justify-content:center; color:var(--text-secondary);">No Poster</div>
             <?php endif; ?>
             
             <div class="summary-details">
                 <h1><?php echo htmlspecialchars($item_name); ?></h1>
                 
                 <div class="meta-info">
-                    <span class="rating-badge rating-<?php echo str_replace('-', '', $rating); ?>">
-                        <?php echo $rating; ?>
-                    </span>
-                    <span>⏱️ <?php echo $duration; ?> min</span>
-                    <?php if (isset($genre)): ?>
-                        <span>🎭 <?php echo htmlspecialchars($genre); ?></span>
+                    <?php if (!empty($rating)): ?>
+                    <span class="rating-badge rating-<?php echo str_replace('-', '', $rating); ?>"><?php echo htmlspecialchars($rating); ?></span>
+                    <?php endif; ?>
+                    <?php if (!empty($duration)): ?>
+                    <span>⏱️ <?php echo htmlspecialchars($duration); ?> min</span>
+                    <?php endif; ?>
+                    <?php if (isset($genre) && !empty($genre)): ?>
+                    <span>🎭 <?php echo htmlspecialchars($genre); ?></span>
                     <?php endif; ?>
                 </div>
                 
@@ -842,19 +724,17 @@ if ($user['account_type'] == 'adult') {
                     <div class="location-info">
                         <strong><?php echo htmlspecialchars($cinema_name); ?></strong><br>
                         📍 <?php echo htmlspecialchars($location); ?><br>
-                        🎬 Screen <?php echo $screen_number; ?><br>
+                        🎬 Screen <?php echo htmlspecialchars($screen_number); ?><br>
                         📅 <?php echo date('F d, Y', strtotime($show_date)); ?> at <?php echo date('h:i A', strtotime($show_time)); ?>
                     </div>
                 <?php else: ?>
                     <div class="location-info">
-                        <strong>Online Streaming</strong><br>
-                        Watch anywhere, anytime with 3 views per ticket
+                        <strong>Online Streaming</strong><br>Watch anywhere, anytime
                     </div>
                 <?php endif; ?>
             </div>
         </div>
         
-        <!-- Cinema Strip Divider -->
         <div class="cinema-strip"></div>
         
         <?php if ($ticket_type == 'online'): ?>
@@ -866,11 +746,9 @@ if ($user['account_type'] == 'adult') {
                     <h3>🎥 Online Streaming Benefits</h3>
                     <ul>
                         <li>Watch on any device (phone, tablet, computer)</li>
-                        <li>3 views included per ticket</li>
-                        <li>Valid for 30 days after purchase</li>
+                        <li>Valid for 7 days after purchase</li>
                         <li>HD streaming quality</li>
                         <li>Pause and resume anytime</li>
-                        <li><span style="color: var(--red);">20% discount</span> applied to online tickets</li>
                     </ul>
                 </div>
                 
@@ -880,92 +758,44 @@ if ($user['account_type'] == 'adult') {
                         $status_class = $available <= 5 ? 'warning' : '';
                     ?>
                         <div class="schedule-card" onclick="selectSchedule(<?php echo $schedule['id']; ?>, <?php echo $schedule['price']; ?>, this)">
-                            <div class="schedule-time">
-                                🕐 <?php echo date('h:i A', strtotime($schedule['show_time'])); ?>
-                            </div>
-                            <div class="schedule-date">
-                                <?php echo date('F d, Y', strtotime($schedule['show_date'])); ?>
-                            </div>
-                            <div class="availability <?php echo $status_class; ?>">
-                                👥 <?php echo $available; ?> spots available
-                            </div>
-                            <div class="schedule-price">
-                                $<?php echo number_format($schedule['price'], 2); ?> per ticket
-                            </div>
+                            <div class="schedule-time">🕐 <?php echo date('h:i A', strtotime($schedule['show_time'])); ?></div>
+                            <div class="schedule-date"><?php echo date('F d, Y', strtotime($schedule['show_date'])); ?></div>
+                            <div class="availability <?php echo $status_class; ?>">👥 <?php echo $available; ?> spots available</div>
+                            <div class="schedule-price">₱<?php echo number_format($schedule['price'], 2); ?> per ticket</div>
                         </div>
                     <?php endforeach; ?>
                 </div>
                 
                 <form method="GET" action="payment.php" id="onlineForm" style="margin-top: 30px;">
-                    <input type="hidden" name="online_id" id="selectedScheduleId">
-                    
-                    <div class="form-group">
-                        <label>Number of Tickets</label>
-                        <select name="quantity" id="quantity" required>
-                            <?php for ($i = 1; $i <= 10; $i++): ?>
-                                <option value="<?php echo $i; ?>"><?php echo $i; ?> ticket<?php echo $i > 1 ? 's' : ''; ?></option>
-                            <?php endfor; ?>
-                        </select>
-                    </div>
+                    <input type="hidden" name="type" value="online">
+                    <input type="hidden" name="id" id="selectedScheduleId">
+                    <input type="hidden" name="quantity" value="1">
                     
                     <div class="price-breakdown" id="priceBreakdown" style="display: none;">
-                        <div class="price-row">
-                            <span>Price per ticket:</span>
-                            <span id="perTicketPrice">$0.00</span>
-                        </div>
-                        <div class="price-row">
-                            <span>Processing Fee (₱150 each):</span>
-                            <span>$<?php echo number_format($processing_fee, 2); ?></span>
-                        </div>
-                        <div class="price-row" id="subtotalRow">
-                            <span>Subtotal:</span>
-                            <span id="subtotal">$0.00</span>
-                        </div>
-                        <div class="price-row total">
-                            <span>Total:</span>
-                            <span id="total">$0.00</span>
-                        </div>
+                        <div class="price-row"><span>Price per ticket:</span><span id="perTicketPrice">₱0.00</span></div>
+                        <div class="price-row"><span>Service Fee:</span><span>₱<?php echo number_format($processing_fee_online, 2); ?></span></div>
+                        <div class="price-row total"><span>Total:</span><span id="total">₱0.00</span></div>
                     </div>
                     
-                    <button type="submit" class="proceed-btn" id="proceedBtn" disabled>
-                        Proceed to Payment
-                    </button>
+                    <button type="submit" class="proceed-btn" id="proceedBtn" disabled>Proceed to Payment</button>
                 </form>
             </div>
             
             <script>
                 let selectedSchedulePrice = 0;
-                const processingFee = <?php echo $processing_fee; ?>;
+                const processingFee = <?php echo $processing_fee_online; ?>;
                 
                 function selectSchedule(scheduleId, price, element) {
-                    document.querySelectorAll('.schedule-card').forEach(card => {
-                        card.classList.remove('selected');
-                    });
-                    
+                    document.querySelectorAll('.schedule-card').forEach(card => card.classList.remove('selected'));
                     element.classList.add('selected');
-                    
                     selectedSchedulePrice = price;
                     document.getElementById('selectedScheduleId').value = scheduleId;
-                    
                     document.getElementById('priceBreakdown').style.display = 'block';
-                    document.getElementById('perTicketPrice').textContent = '$' + price.toFixed(2);
-                    
+                    document.getElementById('perTicketPrice').textContent = '₱' + price.toFixed(2);
+                    const total = price + processingFee;
+                    document.getElementById('total').textContent = '₱' + total.toFixed(2);
                     document.getElementById('proceedBtn').disabled = false;
-                    
-                    updatePrice();
                 }
-                
-                function updatePrice() {
-                    const quantity = parseInt(document.getElementById('quantity').value);
-                    const subtotal = selectedSchedulePrice * quantity;
-                    const totalFee = processingFee * quantity;
-                    const total = subtotal + totalFee;
-                    
-                    document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(2);
-                    document.getElementById('total').textContent = '$' + total.toFixed(2);
-                }
-                
-                document.getElementById('quantity').addEventListener('change', updatePrice);
                 
                 document.getElementById('onlineForm').addEventListener('submit', function(e) {
                     if (!document.getElementById('selectedScheduleId').value) {
@@ -981,18 +811,9 @@ if ($user['account_type'] == 'adult') {
                 <h2>Select Your Seats</h2>
                 
                 <div class="legend">
-                    <div class="legend-item">
-                        <div class="legend-box available"></div>
-                        <span>Available</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-box selected"></div>
-                        <span>Selected</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-box booked"></div>
-                        <span>Booked</span>
-                    </div>
+                    <div class="legend-item"><div class="legend-box available"></div><span>Available</span></div>
+                    <div class="legend-item"><div class="legend-box selected"></div><span>Selected</span></div>
+                    <div class="legend-item"><div class="legend-box booked"></div><span>Booked</span></div>
                 </div>
                 
                 <div class="screen">SCREEN</div>
@@ -1000,15 +821,15 @@ if ($user['account_type'] == 'adult') {
                 <div class="seat-map" id="seatMap">
                     <?php foreach ($seats as $seat): ?>
                         <div class="seat <?php echo $seat['available'] ? 'available' : 'booked'; ?>" 
-                             data-seat="<?php echo $seat['number']; ?>"
-                             onclick="selectSeat(this, <?php echo $available_seats; ?>)">
-                            <?php echo $seat['number']; ?>
+                             data-seat="<?php echo htmlspecialchars($seat['number']); ?>"
+                             onclick="selectSeat(this)">
+                            <?php echo htmlspecialchars($seat['number']); ?>
                         </div>
                     <?php endforeach; ?>
                 </div>
                 
                 <div class="selected-info" id="selectedInfo">
-                    Selected Seats: <span id="selectedSeatsDisplay">None</span>
+                    Selected Seat: <span id="selectedSeatsDisplay">None</span>
                 </div>
             </div>
             
@@ -1019,9 +840,7 @@ if ($user['account_type'] == 'adult') {
                         <div class="form-group">
                             <label>Purchase for:</label>
                             <select name="for_user_id" id="for_user_id">
-                                <option value="<?php echo $user['id']; ?>">
-                                    Myself (<?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?>)
-                                </option>
+                                <option value="<?php echo $user['id']; ?>">Myself (<?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?>)</option>
                                 <?php foreach ($linked_accounts as $account): ?>
                                     <option value="<?php echo $account['id']; ?>">
                                         <?php echo htmlspecialchars($account['first_name'] . ' ' . $account['last_name']); ?> 
@@ -1032,74 +851,45 @@ if ($user['account_type'] == 'adult') {
                         </div>
                     <?php endif; ?>
                     
-                    <div class="form-group">
-                        <label>Number of Tickets</label>
-                        <select name="quantity" id="quantity" onchange="updateQuantity()">
-                            <?php for ($i = 1; $i <= min(10, $available_seats); $i++): ?>
-                                <option value="<?php echo $i; ?>"><?php echo $i; ?> ticket<?php echo $i > 1 ? 's' : ''; ?></option>
-                            <?php endfor; ?>
-                        </select>
-                    </div>
-                    
+                    <input type="hidden" name="quantity" value="1">
                     <input type="hidden" name="seats" id="selectedSeatsInput">
                     
                     <div class="price-breakdown">
-                        <div class="price-row">
-                            <span>Price per ticket:</span>
-                            <span>$<?php echo number_format($base_price, 2); ?></span>
-                        </div>
-                        <div class="price-row">
-                            <span>Processing Fee (₱150 each):</span>
-                            <span>$<?php echo number_format($processing_fee, 2); ?></span>
-                        </div>
-                        <div class="price-row" id="subtotalRow">
-                            <span>Subtotal:</span>
-                            <span id="subtotal">$<?php echo number_format($base_price, 2); ?></span>
-                        </div>
-                        <div class="price-row total">
-                            <span>Total:</span>
-                            <span id="total">$<?php echo number_format($base_price + $processing_fee, 2); ?></span>
-                        </div>
+                        <div class="price-row"><span>Price per ticket:</span><span>₱<?php echo number_format($base_price, 2); ?></span></div>
+                        <div class="price-row"><span>Service Fee:</span><span>₱<?php echo number_format($processing_fee_cinema, 2); ?></span></div>
+                        <div class="price-row total"><span>Total:</span><span>₱<?php echo number_format($base_price + $processing_fee_cinema, 2); ?></span></div>
                     </div>
                     
-                    <button type="submit" class="proceed-btn" id="proceedBtn" disabled>
-                        Proceed to Payment
-                    </button>
+                    <button type="submit" class="proceed-btn" id="proceedBtn" disabled>Proceed to Payment</button>
                 </form>
             </div>
             
             <script>
                 let selectedSeats = [];
-                const basePrice = <?php echo $base_price; ?>;
-                const processingFee = <?php echo $processing_fee; ?>;
                 
-                function selectSeat(seat, maxSeats) {
-                    if (seat.classList.contains('booked')) return;
+                function selectSeat(seatElement) {
+                    if (seatElement.classList.contains('booked')) return;
+                    const seatNumber = seatElement.dataset.seat;
                     
-                    const quantity = parseInt(document.getElementById('quantity').value);
-                    
-                    if (seat.classList.contains('selected')) {
-                        seat.classList.remove('selected');
-                        selectedSeats = selectedSeats.filter(s => s !== seat.dataset.seat);
+                    if (seatElement.classList.contains('selected')) {
+                        seatElement.classList.remove('selected');
+                        selectedSeats = selectedSeats.filter(s => s !== seatNumber);
                     } else {
-                        if (selectedSeats.length < quantity) {
-                            seat.classList.add('selected');
-                            selectedSeats.push(seat.dataset.seat);
+                        if (selectedSeats.length < 1) {
+                            seatElement.classList.add('selected');
+                            selectedSeats.push(seatNumber);
                         } else {
-                            alert('You can only select ' + quantity + ' seat(s)');
+                            alert('You can only select 1 seat');
                         }
                     }
-                    
                     updateSelectedSeats();
                     updateProceedButton();
-                    updateTotal();
                 }
                 
                 function updateSelectedSeats() {
                     const display = document.getElementById('selectedSeatsDisplay');
                     const input = document.getElementById('selectedSeatsInput');
-                    
-                    if (selectedSeats.length) {
+                    if (selectedSeats.length > 0) {
                         display.textContent = selectedSeats.join(', ');
                         input.value = selectedSeats.join(',');
                     } else {
@@ -1109,45 +899,13 @@ if ($user['account_type'] == 'adult') {
                 }
                 
                 function updateProceedButton() {
-                    const quantity = parseInt(document.getElementById('quantity').value);
-                    document.getElementById('proceedBtn').disabled = selectedSeats.length !== quantity;
-                }
-                
-                function updateQuantity() {
-                    const quantity = parseInt(document.getElementById('quantity').value);
-                    
-                    while (selectedSeats.length > quantity) {
-                        const removed = selectedSeats.pop();
-                        const seat = document.querySelector(`[data-seat="${removed}"]`);
-                        if (seat) seat.classList.remove('selected');
-                    }
-                    
-                    updateSelectedSeats();
-                    updateProceedButton();
-                    
-                    const subtotal = basePrice * quantity;
-                    const totalFee = processingFee * quantity;
-                    const total = subtotal + totalFee;
-                    
-                    document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(2);
-                    document.getElementById('total').textContent = '$' + total.toFixed(2);
-                }
-                
-                function updateTotal() {
-                    const quantity = parseInt(document.getElementById('quantity').value);
-                    const subtotal = basePrice * quantity;
-                    const totalFee = processingFee * quantity;
-                    const total = subtotal + totalFee;
-                    
-                    document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(2);
-                    document.getElementById('total').textContent = '$' + total.toFixed(2);
+                    document.getElementById('proceedBtn').disabled = selectedSeats.length !== 1;
                 }
                 
                 document.getElementById('physicalForm').addEventListener('submit', function(e) {
-                    const quantity = parseInt(document.getElementById('quantity').value);
-                    if (selectedSeats.length !== quantity) {
+                    if (selectedSeats.length !== 1) {
                         e.preventDefault();
-                        alert('Please select ' + quantity + ' seat(s)');
+                        alert('Please select 1 seat');
                     }
                 });
             </script>

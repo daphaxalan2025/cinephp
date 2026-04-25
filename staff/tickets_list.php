@@ -1,5 +1,5 @@
 <?php
-// staff/tickets_list.php
+// staff/tickets_list.php - FIXED: PHP Peso currency
 require_once '../includes/functions.php';
 requireStaff();
 
@@ -593,7 +593,7 @@ $paid_tickets = $total_tickets - $used_tickets;
             </div>
             <div class="info-item">
                 <div class="info-label">Price</div>
-                <div class="info-value">$<?php echo number_format($screening['price'], 2); ?></div>
+                <div class="info-value">₱<?php echo number_format($screening['price'], 2); ?></div>
             </div>
         </div>
         
@@ -612,7 +612,7 @@ $paid_tickets = $total_tickets - $used_tickets;
                 <div class="stat-label">Used</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number">$<?php echo number_format($total_revenue, 2); ?></div>
+                <div class="stat-number">₱<?php echo number_format($total_revenue, 2); ?></div>
                 <div class="stat-label">Revenue</div>
             </div>
         </div>
@@ -646,7 +646,7 @@ $paid_tickets = $total_tickets - $used_tickets;
                                 <td><?php echo htmlspecialchars($ticket['phone']); ?></td>
                                 <td><?php echo $ticket['seat_numbers'] ?: 'N/A'; ?></td>
                                 <td><?php echo $ticket['quantity']; ?></td>
-                                <td class="amount-highlight">$<?php echo number_format($ticket['total_price'], 2); ?></td>
+                                <td class="amount-highlight">₱<?php echo number_format($ticket['total_price'], 2); ?></td>
                                 <td>
                                     <span class="status-badge status-<?php echo $ticket['status']; ?>">
                                         <?php echo strtoupper($ticket['status']); ?>

@@ -1,10 +1,11 @@
 <?php
-// user/history.php
+// user/history.php - FIXED: Consistent navbar matching movies.php and profile.php
 require_once '../includes/functions.php';
 requireLogin();
 
 $pdo = getDB();
 $user = getCurrentUser();
+$profile_type = $_SESSION['profile_type'] ?? 'adult';
 
 // Handle clear history
 if (isset($_GET['clear'])) {
@@ -45,9 +46,12 @@ foreach ($history as $item) {
     }
     $grouped_history[$date][] = $item;
 }
+
+// Get current theme
+$current_theme = $user['theme_preference'] ?? 'dark';
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<?php echo $current_theme; ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -55,21 +59,79 @@ foreach ($history as $item) {
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --black: #0a0a0a;
-            --deep-gray: #1a1a1a;
-            --medium-gray: #2a2a2a;
-            --light-gray: #333333;
-            --red: #e50914;
-            --red-dark: #b2070f;
-            --red-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+        /* Theme Variables - Matching movies.php */
+        :root[data-theme="dark"] {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #2a2a2a;
             --text-primary: #ffffff;
             --text-secondary: #b3b3b3;
+            --accent: #e50914;
+            --accent-dark: #b2070f;
+            --accent-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+            --border-color: rgba(229, 9, 20, 0.2);
+            --card-bg: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
             --glass-bg: rgba(26, 26, 26, 0.7);
             --glass-border: rgba(255, 255, 255, 0.05);
-            --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
+            --danger-color: #ff4444;
+            --danger-glow: 0 0 20px rgba(255, 68, 68, 0.3);
+            --success-color: #44ff44;
         }
-        
+
+        :root[data-theme="light"] {
+            --bg-primary: #f5f5f5;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #e0e0e0;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --accent: #e50914;
+            --accent-dark: #b2070f;
+            --accent-glow: 0 0 20px rgba(229, 9, 20, 0.2);
+            --border-color: rgba(229, 9, 20, 0.2);
+            --card-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(240, 240, 240, 0.95) 100%);
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(229, 9, 20, 0.1);
+            --danger-color: #cc0000;
+            --danger-glow: 0 0 20px rgba(204, 0, 0, 0.3);
+            --success-color: #00aa00;
+        }
+
+        :root[data-theme="neon"] {
+            --bg-primary: #0a0a2a;
+            --bg-secondary: #1a1a3a;
+            --bg-tertiary: #2a2a4a;
+            --text-primary: #00ffff;
+            --text-secondary: #ff00ff;
+            --accent: #ff00ff;
+            --accent-dark: #cc00cc;
+            --accent-glow: 0 0 20px rgba(255, 0, 255, 0.5);
+            --border-color: rgba(255, 0, 255, 0.3);
+            --card-bg: linear-gradient(135deg, rgba(26, 26, 58, 0.9) 0%, rgba(20, 20, 50, 0.95) 100%);
+            --glass-bg: rgba(26, 26, 58, 0.7);
+            --glass-border: rgba(255, 0, 255, 0.2);
+            --danger-color: #ff00ff;
+            --danger-glow: 0 0 20px rgba(255, 0, 255, 0.5);
+            --success-color: #00ffff;
+        }
+
+        :root[data-theme="matrix"] {
+            --bg-primary: #000000;
+            --bg-secondary: #0a1a0a;
+            --bg-tertiary: #0f2a0f;
+            --text-primary: #00ff00;
+            --text-secondary: #00aa00;
+            --accent: #00ff00;
+            --accent-dark: #00aa00;
+            --accent-glow: 0 0 20px rgba(0, 255, 0, 0.5);
+            --border-color: rgba(0, 255, 0, 0.3);
+            --card-bg: linear-gradient(135deg, rgba(10, 26, 10, 0.9) 0%, rgba(5, 20, 5, 0.95) 100%);
+            --glass-bg: rgba(10, 26, 10, 0.7);
+            --glass-border: rgba(0, 255, 0, 0.2);
+            --danger-color: #ff0000;
+            --danger-glow: 0 0 20px rgba(255, 0, 0, 0.5);
+            --success-color: #00ff00;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -77,13 +139,14 @@ foreach ($history as $item) {
         }
         
         body {
-            background: var(--black);
+            background: var(--bg-primary);
             color: var(--text-primary);
             font-family: 'Inter', sans-serif;
             font-weight: 400;
             line-height: 1.6;
             min-height: 100vh;
             position: relative;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
         
         body::before {
@@ -93,8 +156,9 @@ foreach ($history as $item) {
             left: 0;
             right: 0;
             bottom: 0;
-            background: radial-gradient(circle at 20% 50%, rgba(229, 9, 20, 0.03) 0%, transparent 50%),
-                        radial-gradient(circle at 80% 80%, rgba(229, 9, 20, 0.03) 0%, transparent 50%);
+            background: radial-gradient(circle at 20% 50%, var(--accent) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, var(--accent) 0%, transparent 50%);
+            opacity: 0.03;
             pointer-events: none;
             z-index: -1;
         }
@@ -108,67 +172,71 @@ foreach ($history as $item) {
             border-radius: 12px;
         }
         
-        /* Navigation */
+        /* Navigation - Matching movies.php style */
         .navbar {
-            background: rgba(10, 10, 10, 0.95);
+            background: rgba(var(--bg-secondary), 0.95);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.8rem 0;
             position: sticky;
             top: 0;
             z-index: 1000;
         }
         
         .nav-container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 20px;
         }
         
         .logo {
-            color: var(--red);
-            font-size: 1.8rem;
+            color: var(--accent);
+            font-size: 1.5rem;
             font-weight: 800;
             font-family: 'Montserrat', sans-serif;
             text-decoration: none;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 1.5px;
             position: relative;
             transition: all 0.3s;
+            white-space: nowrap;
         }
         
         .logo:hover {
-            text-shadow: var(--red-glow);
+            text-shadow: var(--accent-glow);
         }
         
         .logo::before {
             content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
-            filter: drop-shadow(0 0 5px var(--red));
+            margin-right: 8px;
+            font-size: 1.2rem;
+            filter: drop-shadow(0 0 5px var(--accent));
         }
         
         .nav-links {
             display: flex;
-            gap: 25px;
+            gap: 5px;
             align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
         }
         
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             transition: all 0.3s;
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             position: relative;
+            white-space: nowrap;
         }
         
         .nav-links a::after {
@@ -179,12 +247,12 @@ foreach ($history as $item) {
             transform: translateX(-50%);
             width: 0;
             height: 2px;
-            background: var(--red);
+            background: var(--accent);
             transition: width 0.3s;
         }
         
         .nav-links a:hover {
-            color: var(--red);
+            color: var(--accent);
         }
         
         .nav-links a:hover::after {
@@ -192,22 +260,54 @@ foreach ($history as $item) {
         }
         
         .nav-links a.active {
-            color: var(--red);
+            color: var(--accent);
         }
         
         .nav-links a.active::after {
             width: 60%;
         }
         
-        /* Main Container */
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 30px;
+        /* Profile Badge in Navbar - Matching movies.php */
+        .profile-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(var(--accent), 0.15);
+            padding: 6px 15px;
+            border-radius: 40px;
+            margin-left: 10px;
+            font-size: 0.85rem;
         }
         
-        /* Header */
-        .history-header {
+        .profile-badge .profile-name {
+            font-weight: 600;
+            color: var(--accent);
+        }
+        
+        .profile-badge .profile-switch {
+            color: var(--text-primary);
+            text-decoration: none;
+            padding: 4px 10px;
+            background: rgba(var(--accent), 0.2);
+            border-radius: 30px;
+            transition: all 0.3s;
+            font-size: 0.7rem;
+        }
+        
+        .profile-badge .profile-switch:hover {
+            background: var(--accent);
+            color: var(--bg-primary);
+        }
+        
+        /* Main Container */
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+        
+        /* Page Header - Matching movies.php */
+        .page-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -219,7 +319,7 @@ foreach ($history as $item) {
         h1 {
             font-size: 2.5rem;
             font-weight: 800;
-            background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -228,10 +328,38 @@ foreach ($history as $item) {
             letter-spacing: 2px;
         }
         
+        .account-badge {
+            background: rgba(var(--accent), 0.15);
+            border: 1px solid var(--accent);
+            border-radius: 40px;
+            padding: 8px 20px;
+            font-size: 0.9rem;
+        }
+        
+        .account-badge span {
+            color: var(--text-secondary);
+            margin-right: 5px;
+        }
+        
+        .account-badge strong {
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        
         .btn-danger {
             background: transparent;
-            border: 1px solid #ff4444;
-            color: #ff4444;
+            border: 1px solid var(--danger-color);
+            color: var(--danger-color);
             font-family: 'Montserrat', sans-serif;
             font-weight: 600;
             letter-spacing: 1px;
@@ -245,10 +373,10 @@ foreach ($history as $item) {
         }
         
         .btn-danger:hover {
-            background: #ff4444;
-            color: #fff;
+            background: var(--danger-color);
+            color: var(--bg-primary);
             transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(255, 68, 68, 0.3);
+            box-shadow: 0 5px 20px var(--danger-glow);
         }
         
         /* Date Groups */
@@ -257,12 +385,12 @@ foreach ($history as $item) {
         }
         
         .date-title {
-            color: var(--red);
+            color: var(--accent);
             font-size: 1.5rem;
             font-weight: 600;
             margin-bottom: 20px;
             padding-bottom: 10px;
-            border-bottom: 2px solid rgba(229, 9, 20, 0.2);
+            border-bottom: 2px solid var(--border-color);
             position: relative;
             font-family: 'Montserrat', sans-serif;
         }
@@ -274,7 +402,7 @@ foreach ($history as $item) {
             left: 0;
             width: 100px;
             height: 2px;
-            background: var(--red);
+            background: var(--accent);
         }
         
         /* History List */
@@ -285,10 +413,10 @@ foreach ($history as $item) {
         }
         
         .history-item {
-            background: var(--card-gradient);
+            background: var(--card-bg);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.1);
+            border: 1px solid var(--border-color);
             border-radius: 16px;
             padding: 20px;
             display: flex;
@@ -306,7 +434,7 @@ foreach ($history as $item) {
             left: 0;
             right: 0;
             height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
             transform: translateX(-100%);
             animation: slideBorder 3s infinite;
         }
@@ -319,8 +447,8 @@ foreach ($history as $item) {
         
         .history-item:hover {
             transform: translateX(5px);
-            border-color: rgba(229, 9, 20, 0.3);
-            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.15);
+            border-color: var(--accent);
+            box-shadow: 0 10px 30px var(--accent-glow);
         }
         
         .history-poster {
@@ -328,12 +456,12 @@ foreach ($history as $item) {
             height: 120px;
             object-fit: cover;
             border-radius: 8px;
-            border: 2px solid rgba(229, 9, 20, 0.3);
+            border: 2px solid var(--border-color);
             transition: all 0.3s;
         }
         
         .history-item:hover .history-poster {
-            border-color: var(--red);
+            border-color: var(--accent);
             transform: scale(1.05);
         }
         
@@ -342,7 +470,7 @@ foreach ($history as $item) {
         }
         
         .history-info h3 {
-            color: var(--red);
+            color: var(--accent);
             margin-bottom: 8px;
             font-size: 1.2rem;
             font-weight: 600;
@@ -367,8 +495,8 @@ foreach ($history as $item) {
         
         .rating-G {
             background: rgba(68, 255, 68, 0.15);
-            border: 1px solid #44ff44;
-            color: #44ff44;
+            border: 1px solid var(--success-color);
+            color: var(--success-color);
         }
         
         .rating-PG {
@@ -385,8 +513,8 @@ foreach ($history as $item) {
         
         .rating-R {
             background: rgba(229, 9, 20, 0.15);
-            border: 1px solid var(--red);
-            color: var(--red);
+            border: 1px solid var(--accent);
+            color: var(--accent);
         }
         
         .watch-time {
@@ -398,7 +526,7 @@ foreach ($history as $item) {
         }
         
         .watch-time i {
-            color: var(--red);
+            color: var(--accent);
         }
         
         .history-actions {
@@ -415,31 +543,31 @@ foreach ($history as $item) {
             justify-content: center;
             text-decoration: none;
             transition: all 0.3s;
-            border: 1px solid rgba(229, 9, 20, 0.3);
+            border: 1px solid var(--border-color);
             color: var(--text-primary);
             font-size: 1.1rem;
         }
         
         .btn-icon:hover {
-            border-color: var(--red);
-            color: var(--red);
-            background: rgba(229, 9, 20, 0.1);
+            border-color: var(--accent);
+            color: var(--accent);
+            background: rgba(var(--accent), 0.1);
             transform: scale(1.1);
         }
         
         .btn-icon.remove:hover {
-            border-color: #ff4444;
-            color: #ff4444;
+            border-color: var(--danger-color);
+            color: var(--danger-color);
         }
         
         /* Empty State */
         .empty-state {
             text-align: center;
             padding: 100px 40px;
-            background: var(--card-gradient);
+            background: var(--card-bg);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            border: 1px solid var(--border-color);
             border-radius: 32px;
             margin-top: 30px;
             position: relative;
@@ -460,12 +588,12 @@ foreach ($history as $item) {
         .empty-icon {
             font-size: 5rem;
             margin-bottom: 20px;
-            filter: drop-shadow(0 0 20px rgba(229, 9, 20, 0.3));
+            filter: drop-shadow(0 0 20px var(--accent-glow));
         }
         
         .empty-state h2 {
             font-size: 2rem;
-            color: #fff;
+            color: var(--text-primary);
             margin-bottom: 15px;
         }
         
@@ -476,8 +604,8 @@ foreach ($history as $item) {
         }
         
         .btn-primary {
-            background: var(--red);
-            color: #fff;
+            background: var(--accent);
+            color: var(--bg-primary);
             border: none;
             font-family: 'Montserrat', sans-serif;
             font-weight: 600;
@@ -487,7 +615,7 @@ foreach ($history as $item) {
             padding: 15px 40px;
             border-radius: 40px;
             transition: all 0.3s;
-            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
+            box-shadow: 0 5px 20px var(--accent-glow);
             cursor: pointer;
             position: relative;
             overflow: hidden;
@@ -507,9 +635,9 @@ foreach ($history as $item) {
         }
         
         .btn-primary:hover {
-            background: var(--red-dark);
+            background: var(--accent-dark);
             transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(229, 9, 20, 0.4);
+            box-shadow: 0 8px 30px var(--accent-glow);
         }
         
         .btn-primary:hover::before {
@@ -522,11 +650,11 @@ foreach ($history as $item) {
             margin-bottom: 20px;
             border-radius: 16px;
             animation: slideIn 0.3s ease;
-            background: var(--card-gradient);
+            background: var(--card-bg);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.2);
-            border-left: 4px solid var(--red);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--accent);
             color: var(--text-primary);
         }
         
@@ -544,15 +672,43 @@ foreach ($history as $item) {
         /* Cinema Strip Divider */
         .cinema-strip {
             height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
             margin: 20px 0 30px;
             opacity: 0.3;
         }
         
         /* Responsive */
+        @media (max-width: 1200px) {
+            .nav-links a {
+                padding: 5px 8px;
+                font-size: 0.7rem;
+            }
+        }
+        
+        @media (max-width: 1024px) {
+            .nav-container {
+                padding: 0 15px;
+            }
+        }
+        
         @media (max-width: 768px) {
+            .nav-container {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
             .nav-links {
-                display: none;
+                justify-content: center;
+            }
+            
+            .profile-badge {
+                margin-left: 0;
+                margin-top: 5px;
+            }
+            
+            .page-header {
+                flex-direction: column;
+                align-items: flex-start;
             }
             
             h1 {
@@ -595,22 +751,35 @@ foreach ($history as $item) {
                 <a href="purchases.php">My Tickets</a>
                 <a href="profile.php">Profile</a>
                 <a href="settings.php">Settings</a>
+                <div class="profile-badge">
+                    <span>👤</span>
+                    <span class="profile-name"><?php echo htmlspecialchars($_SESSION['profile_name'] ?? 'Profile'); ?></span>
+                    <a href="select_profile.php" class="profile-switch">Switch</a>
+                </div>
                 <a href="../auth/logout.php">Logout</a>
             </div>
         </div>
     </nav>
     
     <main class="container">
-        <div class="history-header">
+        <div class="page-header">
             <h1>My Watch History</h1>
-            <?php if (!empty($history)): ?>
-                <a href="?clear=1" class="btn-danger" 
-                   onclick="return confirm('Clear your entire watch history?')">Clear All</a>
-            <?php endif; ?>
+            <div class="account-badge">
+                <span>Profile:</span> 
+                <strong><?php echo ucfirst($profile_type); ?></strong>
+            </div>
         </div>
         
         <!-- Cinema Strip Divider -->
         <div class="cinema-strip"></div>
+        
+        <?php if (!empty($history)): ?>
+            <div class="history-header">
+                <div></div>
+                <a href="?clear=1" class="btn-danger" 
+                   onclick="return confirm('Clear your entire watch history?')">Clear All</a>
+            </div>
+        <?php endif; ?>
         
         <?php $flash = getFlash(); ?>
         <?php if ($flash): ?>
@@ -639,7 +808,7 @@ foreach ($history as $item) {
                                          alt="<?php echo htmlspecialchars($item['title']); ?>" 
                                          class="history-poster">
                                 <?php else: ?>
-                                    <div style="width:80px; height:120px; background:var(--deep-gray); border:2px solid rgba(229,9,20,0.3); border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--text-secondary);">
+                                    <div style="width:80px; height:120px; background:var(--bg-tertiary); border:2px solid var(--border-color); border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--text-secondary);">
                                         No Poster
                                     </div>
                                 <?php endif; ?>
@@ -657,6 +826,14 @@ foreach ($history as $item) {
                                     
                                     <div class="watch-time">
                                         <i>⏰</i> Watched at: <?php echo date('h:i A', strtotime($item['watched_at'])); ?>
+                                        <?php if ($item['completed']): ?>
+                                            <span style="color: #44ff44; margin-left: 10px;">✓ Completed</span>
+                                        <?php endif; ?>
+                                        <?php if ($item['watch_duration'] > 0): ?>
+                                            <span style="color: var(--text-secondary); margin-left: 10px;">
+                                                (Watched: <?php echo floor($item['watch_duration'] / 60); ?> min)
+                                            </span>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                                 

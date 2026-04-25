@@ -1,0 +1,18 @@
+# Dependencies
+vendor/
+
+# Composer
+composer.lock
+
+# Environment / config (if sensitive)
+.env
+
+# Uploads (optional but recommended if dynamic)
+uploads/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

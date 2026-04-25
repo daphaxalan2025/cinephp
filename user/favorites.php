@@ -84,9 +84,12 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute([$user['id']]);
 $favorites = $stmt->fetchAll();
+
+// Get current theme
+$current_theme = $user['theme_preference'] ?? 'dark';
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<?php echo $current_theme; ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -94,21 +97,75 @@ $favorites = $stmt->fetchAll();
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --black: #0a0a0a;
-            --deep-gray: #1a1a1a;
-            --medium-gray: #2a2a2a;
-            --light-gray: #333333;
-            --red: #e50914;
-            --red-dark: #b2070f;
-            --red-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+        /* Theme Variables */
+        :root[data-theme="dark"] {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #2a2a2a;
             --text-primary: #ffffff;
             --text-secondary: #b3b3b3;
+            --accent: #e50914;
+            --accent-dark: #b2070f;
+            --accent-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+            --border-color: rgba(229, 9, 20, 0.2);
+            --card-bg: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
             --glass-bg: rgba(26, 26, 26, 0.7);
             --glass-border: rgba(255, 255, 255, 0.05);
-            --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
+            --success-color: #44ff44;
+            --warning-color: #ff4444;
         }
-        
+
+        :root[data-theme="light"] {
+            --bg-primary: #f5f5f5;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #e0e0e0;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --accent: #e50914;
+            --accent-dark: #b2070f;
+            --accent-glow: 0 0 20px rgba(229, 9, 20, 0.2);
+            --border-color: rgba(229, 9, 20, 0.2);
+            --card-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(240, 240, 240, 0.95) 100%);
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(229, 9, 20, 0.1);
+            --success-color: #00aa00;
+            --warning-color: #cc0000;
+        }
+
+        :root[data-theme="neon"] {
+            --bg-primary: #0a0a2a;
+            --bg-secondary: #1a1a3a;
+            --bg-tertiary: #2a2a4a;
+            --text-primary: #00ffff;
+            --text-secondary: #ff00ff;
+            --accent: #ff00ff;
+            --accent-dark: #cc00cc;
+            --accent-glow: 0 0 20px rgba(255, 0, 255, 0.5);
+            --border-color: rgba(255, 0, 255, 0.3);
+            --card-bg: linear-gradient(135deg, rgba(26, 26, 58, 0.9) 0%, rgba(20, 20, 50, 0.95) 100%);
+            --glass-bg: rgba(26, 26, 58, 0.7);
+            --glass-border: rgba(255, 0, 255, 0.2);
+            --success-color: #00ffff;
+            --warning-color: #ff00ff;
+        }
+
+        :root[data-theme="matrix"] {
+            --bg-primary: #000000;
+            --bg-secondary: #0a1a0a;
+            --bg-tertiary: #0f2a0f;
+            --text-primary: #00ff00;
+            --text-secondary: #00aa00;
+            --accent: #00ff00;
+            --accent-dark: #00aa00;
+            --accent-glow: 0 0 20px rgba(0, 255, 0, 0.5);
+            --border-color: rgba(0, 255, 0, 0.3);
+            --card-bg: linear-gradient(135deg, rgba(10, 26, 10, 0.9) 0%, rgba(5, 20, 5, 0.95) 100%);
+            --glass-bg: rgba(10, 26, 10, 0.7);
+            --glass-border: rgba(0, 255, 0, 0.2);
+            --success-color: #00ff00;
+            --warning-color: #ff0000;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -116,13 +173,14 @@ $favorites = $stmt->fetchAll();
         }
         
         body {
-            background: var(--black);
+            background: var(--bg-primary);
             color: var(--text-primary);
             font-family: 'Inter', sans-serif;
             font-weight: 400;
             line-height: 1.6;
             min-height: 100vh;
             position: relative;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
         
         body::before {
@@ -132,8 +190,9 @@ $favorites = $stmt->fetchAll();
             left: 0;
             right: 0;
             bottom: 0;
-            background: radial-gradient(circle at 20% 50%, rgba(229, 9, 20, 0.03) 0%, transparent 50%),
-                        radial-gradient(circle at 80% 80%, rgba(229, 9, 20, 0.03) 0%, transparent 50%);
+            background: radial-gradient(circle at 20% 50%, var(--accent) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, var(--accent) 0%, transparent 50%);
+            opacity: 0.03;
             pointer-events: none;
             z-index: -1;
         }
@@ -149,65 +208,69 @@ $favorites = $stmt->fetchAll();
         
         /* Navigation */
         .navbar {
-            background: rgba(10, 10, 10, 0.95);
+            background: rgba(var(--bg-secondary), 0.95);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.8rem 0;
             position: sticky;
             top: 0;
             z-index: 1000;
         }
         
         .nav-container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 20px;
         }
         
         .logo {
-            color: var(--red);
-            font-size: 1.8rem;
+            color: var(--accent);
+            font-size: 1.5rem;
             font-weight: 800;
             font-family: 'Montserrat', sans-serif;
             text-decoration: none;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 1.5px;
             position: relative;
             transition: all 0.3s;
+            white-space: nowrap;
         }
         
         .logo:hover {
-            text-shadow: var(--red-glow);
+            text-shadow: var(--accent-glow);
         }
         
         .logo::before {
             content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
-            filter: drop-shadow(0 0 5px var(--red));
+            margin-right: 8px;
+            font-size: 1.2rem;
+            filter: drop-shadow(0 0 5px var(--accent));
         }
         
         .nav-links {
             display: flex;
-            gap: 25px;
+            gap: 5px;
             align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
         }
         
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             transition: all 0.3s;
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             position: relative;
+            white-space: nowrap;
         }
         
         .nav-links a::after {
@@ -218,12 +281,12 @@ $favorites = $stmt->fetchAll();
             transform: translateX(-50%);
             width: 0;
             height: 2px;
-            background: var(--red);
+            background: var(--accent);
             transition: width 0.3s;
         }
         
         .nav-links a:hover {
-            color: var(--red);
+            color: var(--accent);
         }
         
         .nav-links a:hover::after {
@@ -231,24 +294,40 @@ $favorites = $stmt->fetchAll();
         }
         
         .nav-links a.active {
-            color: var(--red);
+            color: var(--accent);
         }
         
         .nav-links a.active::after {
             width: 60%;
         }
         
+        .profile-switch {
+            background: rgba(229, 9, 20, 0.15);
+            border: 1px solid #e50914;
+            border-radius: 40px;
+            padding: 6px 15px !important;
+            margin-left: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .profile-switch:hover {
+            background: #e50914;
+            color: white !important;
+        }
+        
         /* Main Container */
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
-            padding: 30px;
+            padding: 30px 20px;
         }
         
         h1 {
             font-size: 2.5rem;
             font-weight: 800;
-            background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -266,10 +345,10 @@ $favorites = $stmt->fetchAll();
         }
         
         .favorite-card {
-            background: var(--card-gradient);
+            background: var(--card-bg);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.1);
+            border: 1px solid var(--border-color);
             border-radius: 24px;
             overflow: hidden;
             transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -283,7 +362,7 @@ $favorites = $stmt->fetchAll();
             left: 0;
             right: 0;
             height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
             transform: translateX(-100%);
             animation: slideBorder 3s infinite;
         }
@@ -296,8 +375,8 @@ $favorites = $stmt->fetchAll();
         
         .favorite-card:hover {
             transform: translateY(-10px);
-            border-color: rgba(229, 9, 20, 0.3);
-            box-shadow: 0 30px 60px rgba(229, 9, 20, 0.2);
+            border-color: var(--accent);
+            box-shadow: 0 30px 60px var(--accent-glow);
         }
         
         .favorite-poster {
@@ -325,8 +404,8 @@ $favorites = $stmt->fetchAll();
         }
         
         .btn-remove {
-            background: rgba(229, 9, 20, 0.9);
-            color: white;
+            background: rgba(var(--accent), 0.9);
+            color: var(--text-primary);
             width: 40px;
             height: 40px;
             border-radius: 50%;
@@ -336,15 +415,15 @@ $favorites = $stmt->fetchAll();
             text-decoration: none;
             font-size: 1.2rem;
             transition: all 0.3s;
-            border: 2px solid var(--red);
-            box-shadow: 0 0 20px rgba(229, 9, 20, 0.3);
+            border: 2px solid var(--accent);
+            box-shadow: 0 0 20px var(--accent-glow);
             backdrop-filter: blur(5px);
         }
         
         .btn-remove:hover {
-            background: var(--red);
+            background: var(--accent);
             transform: scale(1.1) rotate(90deg);
-            box-shadow: 0 0 30px rgba(229, 9, 20, 0.5);
+            box-shadow: 0 0 30px var(--accent-glow);
         }
         
         .favorite-info {
@@ -352,7 +431,7 @@ $favorites = $stmt->fetchAll();
         }
         
         .favorite-info h3 {
-            color: var(--red);
+            color: var(--accent);
             margin-bottom: 10px;
             font-size: 1.3rem;
             font-weight: 700;
@@ -377,8 +456,8 @@ $favorites = $stmt->fetchAll();
         
         .rating-G {
             background: rgba(68, 255, 68, 0.15);
-            border: 1px solid #44ff44;
-            color: #44ff44;
+            border: 1px solid var(--success-color);
+            color: var(--success-color);
         }
         
         .rating-PG {
@@ -395,19 +474,19 @@ $favorites = $stmt->fetchAll();
         
         .rating-R {
             background: rgba(229, 9, 20, 0.15);
-            border: 1px solid var(--red);
-            color: var(--red);
+            border: 1px solid var(--accent);
+            color: var(--accent);
         }
         
         .screenings-badge {
             display: inline-block;
             padding: 6px 15px;
             background: rgba(68, 255, 68, 0.1);
-            border: 1px solid #44ff44;
+            border: 1px solid var(--success-color);
             border-radius: 40px;
             font-size: 0.8rem;
             margin: 10px 0;
-            color: #44ff44;
+            color: var(--success-color);
             font-weight: 500;
         }
         
@@ -421,8 +500,8 @@ $favorites = $stmt->fetchAll();
             flex: 1;
             padding: 12px;
             background: transparent;
-            border: 1px solid var(--red);
-            color: var(--red);
+            border: 1px solid var(--accent);
+            color: var(--accent);
             text-decoration: none;
             border-radius: 40px;
             text-align: center;
@@ -434,20 +513,20 @@ $favorites = $stmt->fetchAll();
         }
         
         .btn-view:hover {
-            background: var(--red);
-            color: #fff;
+            background: var(--accent);
+            color: var(--bg-primary);
             transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
+            box-shadow: 0 5px 20px var(--accent-glow);
         }
         
         /* Empty State */
         .empty-state {
             text-align: center;
             padding: 100px 40px;
-            background: var(--card-gradient);
+            background: var(--card-bg);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            border: 1px solid var(--border-color);
             border-radius: 32px;
             margin-top: 30px;
             position: relative;
@@ -468,12 +547,12 @@ $favorites = $stmt->fetchAll();
         .empty-icon {
             font-size: 5rem;
             margin-bottom: 20px;
-            filter: drop-shadow(0 0 20px rgba(229, 9, 20, 0.3));
+            filter: drop-shadow(0 0 20px var(--accent-glow));
         }
         
         .empty-state h2 {
             font-size: 2rem;
-            color: #fff;
+            color: var(--text-primary);
             margin-bottom: 15px;
         }
         
@@ -484,8 +563,8 @@ $favorites = $stmt->fetchAll();
         }
         
         .btn-primary {
-            background: var(--red);
-            color: #fff;
+            background: var(--accent);
+            color: var(--bg-primary);
             border: none;
             font-family: 'Montserrat', sans-serif;
             font-weight: 600;
@@ -495,7 +574,7 @@ $favorites = $stmt->fetchAll();
             padding: 15px 40px;
             border-radius: 40px;
             transition: all 0.3s;
-            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
+            box-shadow: 0 5px 20px var(--accent-glow);
             cursor: pointer;
             position: relative;
             overflow: hidden;
@@ -515,9 +594,9 @@ $favorites = $stmt->fetchAll();
         }
         
         .btn-primary:hover {
-            background: var(--red-dark);
+            background: var(--accent-dark);
             transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(229, 9, 20, 0.4);
+            box-shadow: 0 8px 30px var(--accent-glow);
         }
         
         .btn-primary:hover::before {
@@ -527,7 +606,7 @@ $favorites = $stmt->fetchAll();
         /* Cinema Strip Divider */
         .cinema-strip {
             height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
             margin: 20px 0 30px;
             opacity: 0.3;
         }
@@ -538,11 +617,11 @@ $favorites = $stmt->fetchAll();
             margin-bottom: 20px;
             border-radius: 16px;
             animation: slideIn 0.3s ease;
-            background: var(--card-gradient);
+            background: var(--card-bg);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.2);
-            border-left: 4px solid var(--red);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--accent);
             color: var(--text-primary);
         }
         
@@ -558,9 +637,27 @@ $favorites = $stmt->fetchAll();
         }
         
         /* Responsive */
+        @media (max-width: 1200px) {
+            .nav-links a {
+                padding: 5px 8px;
+                font-size: 0.7rem;
+            }
+        }
+        
+        @media (max-width: 1024px) {
+            .nav-container {
+                padding: 0 15px;
+            }
+        }
+        
         @media (max-width: 768px) {
+            .nav-container {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
             .nav-links {
-                display: none;
+                justify-content: center;
             }
             
             h1 {
@@ -586,12 +683,17 @@ $favorites = $stmt->fetchAll();
         <div class="nav-container">
             <a href="../index.php" class="logo">CINEMA TICKET</a>
             <div class="nav-links">
-                <a href="movies.php">Movies</a>
-                <a href="favorites.php" class="active">Favorites</a>
+                <a href="movies.php" class="active">Movies</a>
+                <a href="favorites.php">Favorites</a>
                 <a href="history.php">History</a>
                 <a href="purchases.php">My Tickets</a>
                 <a href="profile.php">Profile</a>
                 <a href="settings.php">Settings</a>
+                <div class="profile-badge">
+                    <span>👤</span>
+                    <span class="profile-name"><?php echo htmlspecialchars($_SESSION['profile_name'] ?? 'Profile'); ?></span>
+                    <a href="select_profile.php" class="profile-switch">Switch</a>
+                </div>
                 <a href="../auth/logout.php">Logout</a>
             </div>
         </div>
@@ -626,7 +728,7 @@ $favorites = $stmt->fetchAll();
                                 <img src="../uploads/posters/<?php echo $movie['poster']; ?>" 
                                      alt="<?php echo htmlspecialchars($movie['title']); ?>">
                             <?php else: ?>
-                                <div style="width:100%; height:100%; background:var(--deep-gray); display:flex; align-items:center; justify-content:center;">
+                                <div style="width:100%; height:100%; background:var(--bg-tertiary); display:flex; align-items:center; justify-content:center;">
                                     <span style="color: var(--text-secondary);">No Poster</span>
                                 </div>
                             <?php endif; ?>

@@ -527,10 +527,131 @@ $featured_movies = $pdo->query("
             }
         }
         
+        /* ============ FAMILY SECTION STYLES ============ */
+        .family-intro {
+            text-align: center;
+            margin: 60px 0 40px;
+        }
+        
+        .family-badge {
+            display: inline-block;
+            background: rgba(229,9,20,0.1);
+            padding: 5px 15px;
+            border-radius: 40px;
+            margin-bottom: 20px;
+        }
+        
+        .family-badge span {
+            color: var(--red);
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+        
+        .family-intro h2 {
+            font-size: 2rem;
+            color: #fff;
+            margin-bottom: 20px;
+        }
+        
+        .family-intro p {
+            color: var(--text-secondary);
+            max-width: 700px;
+            margin: 0 auto 40px;
+        }
+        
+        .family-steps {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            margin: 40px 0;
+        }
+        
+        .step-card {
+            background: var(--card-gradient);
+            border: 1px solid rgba(229,9,20,0.2);
+            border-radius: 24px;
+            padding: 30px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        
+        .step-card:hover {
+            transform: translateY(-10px);
+            border-color: var(--red);
+            box-shadow: 0 20px 40px rgba(229,9,20,0.2);
+        }
+        
+        .step-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        
+        .step-card h3 {
+            color: var(--red);
+            margin-bottom: 10px;
+        }
+        
+        .step-card p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .age-restrictions {
+            background: rgba(0,0,0,0.3);
+            border-radius: 24px;
+            padding: 30px;
+            margin: 40px 0;
+        }
+        
+        .age-restrictions h3 {
+            color: var(--red);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .age-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+        
+        .age-card {
+            text-align: center;
+        }
+        
+        .age-emoji {
+            font-size: 2rem;
+        }
+        
+        .age-title {
+            font-weight: 700;
+            margin: 10px 0;
+        }
+        
+        .age-rating {
+            font-size: 0.9rem;
+            color: #b3b3b3;
+        }
+        
+        .age-restriction-item {
+            font-size: 0.8rem;
+            margin-top: 10px;
+        }
+        
+        .age-restriction-item.allowed {
+            color: #44ff44;
+        }
+        
+        .age-restriction-item.restricted {
+            color: #ff8844;
+        }
+        
         /* Responsive */
         @media (max-width: 1024px) {
             .features-grid,
-            .movies-grid {
+            .movies-grid,
+            .family-steps,
+            .age-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
         }
@@ -557,12 +678,18 @@ $featured_movies = $pdo->query("
             }
             
             .features-grid,
-            .movies-grid {
+            .movies-grid,
+            .family-steps,
+            .age-grid {
                 grid-template-columns: 1fr;
             }
             
             .section-title {
                 font-size: 2rem;
+            }
+            
+            .family-intro h2 {
+                font-size: 1.5rem;
             }
         }
     </style>
@@ -656,6 +783,69 @@ $featured_movies = $pdo->query("
             </div>
         </div>
         
+        <!-- ============ FAMILY ACCOUNT SECTION ============ -->
+        <div class="cinema-strip"></div>
+        
+        <div class="family-intro">
+            <div class="family-badge">
+                <span>👨‍👩‍👧‍👦 FOR FAMILIES</span>
+            </div>
+            <h2>One Account for the Whole Family</h2>
+            <p>
+                Parents create ONE account, then add profiles for kids and teens.<br>
+                Each profile sees only age-appropriate content.
+            </p>
+        </div>
+        
+        <div class="family-steps">
+            <div class="step-card">
+                <div class="step-icon">👤</div>
+                <h3>Step 1: Parent Registers</h3>
+                <p>One adult (18+) creates the main account with email and password.</p>
+            </div>
+            
+            <div class="step-card">
+                <div class="step-icon">➕</div>
+                <h3>Step 2: Add Family Profiles</h3>
+                <p>Create separate profiles for each family member (up to 5 total).</p>
+            </div>
+            
+            <div class="step-card">
+                <div class="step-icon">🎬</div>
+                <h3>Step 3: Enjoy Age-Appropriate Content</h3>
+                <p>Kids see G/PG only. Teens see PG-13 and below. Adults see everything.</p>
+            </div>
+        </div>
+        
+        <div class="age-restrictions">
+            <h3>📋 Age-Based Content Restrictions</h3>
+            <div class="age-grid">
+                <div class="age-card">
+                    <div class="age-emoji">🧸</div>
+                    <div class="age-title">Kids (Under 13)</div>
+                    <div class="age-rating">G, PG only</div>
+                    <div class="age-restriction-item allowed">✓ Cannot purchase tickets</div>
+                    <div class="age-restriction-item allowed">✓ Parent must buy for them</div>
+                </div>
+                <div class="age-card">
+                    <div class="age-emoji">🎮</div>
+                    <div class="age-title">Teens (13-17)</div>
+                    <div class="age-rating">G, PG, PG-13 only</div>
+                    <div class="age-restriction-item restricted">⚠️ Can purchase tickets</div>
+                    <div class="age-restriction-item restricted">⚠️ Restricted content filtered</div>
+                </div>
+                <div class="age-card">
+                    <div class="age-emoji">🎬</div>
+                    <div class="age-title">Adults (18+)</div>
+                    <div class="age-rating">All ratings</div>
+                    <div class="age-restriction-item allowed">✓ Full access</div>
+                    <div class="age-restriction-item allowed">✓ Can create family profiles</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="cinema-strip"></div>
+        
         <!-- Featured Movies -->
         <?php if (!empty($featured_movies)): ?>
             <div class="movies-section">
@@ -685,10 +875,10 @@ $featured_movies = $pdo->query("
                                     <span><?php echo htmlspecialchars($movie['genre']); ?></span>
                                 </div>
                                 
-                                <div class="movie-price">$<?php echo number_format($movie['price'], 2); ?></div>
+                                <div class="movie-price">₱<?php echo number_format($movie['price'], 2); ?></div>
                                 
                                 <?php if (isLoggedIn() && $_SESSION['account_type'] == 'user'): ?>
-                                    <a href="user/screenings.php?movie_id=<?php echo $movie['id']; ?>" class="movie-btn">Book Now</a>
+                                    <a href="user/movie_detail.php?id=<?php echo $movie['id']; ?>" class="movie-btn">Book Now</a>
                                 <?php elseif (!isLoggedIn()): ?>
                                     <a href="auth/login.php" class="movie-btn">Login to Book</a>
                                 <?php endif; ?>

@@ -1,5 +1,5 @@
 <?php
-// admin/users.php
+// admin/users.php - FIXED: Added Staff Cinema Assignment
 require_once '../includes/functions.php';
 requireAdmin();
 
@@ -10,17 +10,14 @@ $errors = [];
 if (isset($_GET['delete'])) {
     $id = $_GET['delete'];
     
-    // Don't allow deleting own account
     if ($id == $_SESSION['user_id']) {
         setFlash('You cannot delete your own account', 'error');
     } else {
         try {
-            // Check if user has tickets
             $stmt = $pdo->prepare("SELECT COUNT(*) FROM tickets WHERE user_id = ?");
             $stmt->execute([$id]);
             $ticket_count = $stmt->fetchColumn();
             
-            // Check if user has payments
             $stmt = $pdo->prepare("SELECT COUNT(*) FROM payments WHERE user_id = ?");
             $stmt->execute([$id]);
             $payment_count = $stmt->fetchColumn();
@@ -28,6 +25,10 @@ if (isset($_GET['delete'])) {
             if ($ticket_count > 0 || $payment_count > 0) {
                 setFlash('Cannot delete user with existing tickets or payments. Deactivate instead.', 'error');
             } else {
+                // Also delete staff_cinemas entries
+                $stmt = $pdo->prepare("DELETE FROM staff_cinemas WHERE staff_id = ?");
+                $stmt->execute([$id]);
+                
                 $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
                 if ($stmt->execute([$id])) {
                     setFlash('User deleted successfully', 'success');
@@ -55,8 +56,33 @@ if (isset($_GET['toggle'])) {
     exit;
 }
 
+// ============ HANDLE STAFF CINEMA ASSIGNMENT ============
+if (isset($_GET['assign_cinema'])) {
+    $staff_id = $_GET['assign_cinema'];
+    $cinema_id = $_POST['cinema_id'] ?? 0;
+    
+    try {
+        // First, remove existing assignments
+        $stmt = $pdo->prepare("DELETE FROM staff_cinemas WHERE staff_id = ?");
+        $stmt->execute([$staff_id]);
+        
+        if ($cinema_id > 0) {
+            // Add new assignment
+            $stmt = $pdo->prepare("INSERT INTO staff_cinemas (staff_id, cinema_id, assigned_by) VALUES (?, ?, ?)");
+            $stmt->execute([$staff_id, $cinema_id, $_SESSION['user_id']]);
+            setFlash("Staff member assigned to cinema successfully", 'success');
+        } else {
+            setFlash("Staff cinema assignment removed", 'success');
+        }
+    } catch (PDOException $e) {
+        setFlash('Error: ' . $e->getMessage(), 'error');
+    }
+    header('Location: users.php');
+    exit;
+}
+
 // ============ HANDLE ADD/EDIT ============
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['search'])) {
     $username = trim($_POST['username'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
@@ -99,25 +125,37 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($errors)) {
         try {
             if ($user_id) {
-                // Update - don't change password if not provided
+                // Update
                 if ($password) {
                     $hash = password_hash($password, PASSWORD_DEFAULT);
                     $stmt = $pdo->prepare("UPDATE users SET username=?, email=?, password_hash=?, first_name=?, last_name=?, account_type=? WHERE id=?");
-                    $result = $stmt->execute([$username, $email, $hash, $first_name, $last_name, $account_type, $user_id]);
+                    $stmt->execute([$username, $email, $hash, $first_name, $last_name, $account_type, $user_id]);
                 } else {
                     $stmt = $pdo->prepare("UPDATE users SET username=?, email=?, first_name=?, last_name=?, account_type=? WHERE id=?");
-                    $result = $stmt->execute([$username, $email, $first_name, $last_name, $account_type, $user_id]);
+                    $stmt->execute([$username, $email, $first_name, $last_name, $account_type, $user_id]);
                 }
-                if ($result) {
-                    setFlash('User updated successfully', 'success');
-                }
+                setFlash('User updated successfully', 'success');
             } else {
-                // Insert
+                // Insert with all required columns
                 $hash = password_hash($password, PASSWORD_DEFAULT);
-                $stmt = $pdo->prepare("INSERT INTO users (username, email, password_hash, first_name, last_name, account_type, birthdate) VALUES (?, ?, ?, ?, ?, ?, '2000-01-01')");
-                $result = $stmt->execute([$username, $email, $hash, $first_name, $last_name, $account_type]);
-                if ($result) {
-                    setFlash('User added successfully', 'success');
+                $birthdate = '2000-01-01';
+                $stmt = $pdo->prepare("
+                    INSERT INTO users (
+                        username, email, password_hash, first_name, last_name,
+                        birthdate, account_type, gender, country, phone,
+                        parent_id, cinema_id, is_active, theme_preference
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([
+                    $username, $email, $hash, $first_name, $last_name,
+                    $birthdate, $account_type, 'other', 'PH', '0000000000',
+                    null, null, 1, 'dark'
+                ]);
+                setFlash('User added successfully', 'success');
+                
+                // If adding a staff member, they need cinema assignment
+                if ($account_type == 'staff') {
+                    setFlash('Note: Staff member needs to be assigned to a cinema from the table below.', 'info');
                 }
             }
         } catch (PDOException $e) {
@@ -128,22 +166,41 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 }
 
-// Get all users with payment stats
+// ============ HANDLE SEARCH ============
+$search_term = '';
+$search_sql = "";
+$search_params = [];
+
+if (isset($_GET['search']) && !empty(trim($_GET['search']))) {
+    $search_term = trim($_GET['search']);
+    $search_sql = "WHERE (u.id LIKE ? OR u.username LIKE ? OR u.email LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ? OR u.account_type LIKE ?)";
+    $like = "%{$search_term}%";
+    $search_params = [$like, $like, $like, $like, $like, $like];
+}
+
+// Get all users with payment stats (with optional search)
 try {
-    $users = $pdo->query("
+    $sql = "
         SELECT u.*, 
                (SELECT COUNT(*) FROM tickets WHERE user_id = u.id) as ticket_count,
                (SELECT COUNT(*) FROM payments WHERE user_id = u.id) as payment_count,
                (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE user_id = u.id AND payment_status = 'completed') as total_spent
         FROM users u
+        {$search_sql}
         ORDER BY u.created_at DESC
-    ")->fetchAll();
+    ";
+    
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($search_params);
+    $users = $stmt->fetchAll();
 } catch (PDOException $e) {
     $users = [];
     setFlash('Error loading users: ' . $e->getMessage(), 'error');
 }
 
-// Get user for editing
+// Get all cinemas for staff assignment dropdown
+$all_cinemas = $pdo->query("SELECT id, name FROM cinemas ORDER BY name")->fetchAll();
+
 $edit_user = null;
 if (isset($_GET['edit'])) {
     try {
@@ -162,7 +219,6 @@ if (isset($_GET['edit'])) {
     }
 }
 
-// Account types
 $account_types = ['user', 'staff', 'admin'];
 ?>
 <!DOCTYPE html>
@@ -218,7 +274,6 @@ $account_types = ['user', 'staff', 'admin'];
             z-index: -1;
         }
         
-        /* Glassmorphism Base */
         .glass {
             background: var(--glass-bg);
             backdrop-filter: blur(10px);
@@ -227,37 +282,37 @@ $account_types = ['user', 'staff', 'admin'];
             border-radius: 12px;
         }
         
-        /* Navigation */
         .navbar {
             background: rgba(10, 10, 10, 0.95);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
+            padding: 0.8rem 0;
             position: sticky;
             top: 0;
             z-index: 1000;
         }
         
         .nav-container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 20px;
         }
         
         .logo {
             color: var(--red);
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             font-weight: 800;
             font-family: 'Montserrat', sans-serif;
             text-decoration: none;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 1.5px;
             position: relative;
             transition: all 0.3s;
+            white-space: nowrap;
         }
         
         .logo:hover {
@@ -266,28 +321,31 @@ $account_types = ['user', 'staff', 'admin'];
         
         .logo::before {
             content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
+            margin-right: 8px;
+            font-size: 1.2rem;
             filter: drop-shadow(0 0 5px var(--red));
         }
         
         .nav-links {
             display: flex;
-            gap: 25px;
+            gap: 5px;
             align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
         }
         
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             transition: all 0.3s;
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             position: relative;
+            white-space: nowrap;
         }
         
         .nav-links a::after {
@@ -318,14 +376,12 @@ $account_types = ['user', 'staff', 'admin'];
             width: 60%;
         }
         
-        /* Main Container */
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
-            padding: 30px;
+            padding: 30px 20px;
         }
         
-        /* Headers */
         h1, h2, h3, h4 {
             font-family: 'Montserrat', sans-serif;
             font-weight: 700;
@@ -333,7 +389,7 @@ $account_types = ['user', 'staff', 'admin'];
         }
         
         h1 {
-            font-size: 3rem;
+            font-size: 2.8rem;
             font-weight: 800;
             background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
             -webkit-background-clip: text;
@@ -343,7 +399,6 @@ $account_types = ['user', 'staff', 'admin'];
             text-transform: uppercase;
         }
         
-        /* Form Container */
         .form-container {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
@@ -440,7 +495,6 @@ $account_types = ['user', 'staff', 'admin'];
             padding-left: 15px;
         }
         
-        /* Buttons */
         .btn-primary {
             background: var(--red);
             color: #fff;
@@ -450,7 +504,7 @@ $account_types = ['user', 'staff', 'admin'];
             letter-spacing: 1.5px;
             text-transform: uppercase;
             font-size: 0.9rem;
-            padding: 14px 32px;
+            padding: 14px 28px;
             border-radius: 40px;
             transition: all 0.3s;
             box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
@@ -490,7 +544,7 @@ $account_types = ['user', 'staff', 'admin'];
             letter-spacing: 1px;
             text-transform: uppercase;
             font-size: 0.9rem;
-            padding: 14px 32px;
+            padding: 14px 28px;
             border-radius: 40px;
             background: rgba(0, 0, 0, 0.3);
             transition: all 0.3s;
@@ -505,59 +559,148 @@ $account_types = ['user', 'staff', 'admin'];
             transform: translateY(-2px);
         }
         
-        .btn-small {
-            padding: 6px 14px;
-            font-size: 0.75rem;
-            text-decoration: none;
-            border: 1px solid rgba(229, 9, 20, 0.3);
-            border-radius: 30px;
-            color: var(--text-primary);
-            transition: all 0.3s;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            background: rgba(0, 0, 0, 0.3);
-            display: inline-block;
-            margin: 2px;
+        /* ========== ORGANIZED ACTION BUTTONS ========== */
+        .action-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
         }
         
-        .btn-small:hover {
+        .btn-action {
+            padding: 6px 12px;
+            font-size: 0.7rem;
+            text-decoration: none;
+            border-radius: 30px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.3s;
+            display: inline-block;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(229, 9, 20, 0.3);
+            color: var(--text-primary);
+        }
+        
+        .btn-action:hover {
             border-color: var(--red);
             color: var(--red);
             background: rgba(229, 9, 20, 0.1);
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(229, 9, 20, 0.2);
         }
         
-        .btn-small.delete {
+        .btn-action.delete {
             border-color: #ff4444;
             color: #ff4444;
         }
         
-        .btn-small.delete:hover {
+        .btn-action.delete:hover {
             background: #ff4444;
             color: #fff;
             border-color: #ff4444;
         }
         
-        .btn-small.enable {
+        .btn-action.enable {
             border-color: #44ff44;
             color: #44ff44;
         }
         
-        .btn-small.enable:hover {
+        .btn-action.enable:hover {
             background: #44ff44;
             color: #000;
+            border-color: #44ff44;
         }
         
-        /* Data Table */
+        /* Search Bar Styles */
+        .search-container {
+            margin: 30px 0 20px 0;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        
+        .search-form {
+            display: flex;
+            gap: 10px;
+            background: rgba(20, 20, 20, 0.6);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 50px;
+            padding: 5px;
+        }
+        
+        .search-input {
+            background: transparent;
+            border: none;
+            padding: 12px 20px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            width: 250px;
+            outline: none;
+        }
+        
+        .search-input::placeholder {
+            color: var(--text-secondary);
+        }
+        
+        .search-btn {
+            background: var(--red);
+            border: none;
+            border-radius: 50px;
+            padding: 0 20px;
+            color: white;
+            cursor: pointer;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.8rem;
+            transition: all 0.3s;
+        }
+        
+        .search-btn:hover {
+            background: var(--red-dark);
+            transform: scale(1.02);
+        }
+        
+        .clear-search {
+            background: rgba(50, 50, 50, 0.6);
+            border: 1px solid rgba(229, 9, 20, 0.3);
+            border-radius: 50px;
+            padding: 0 20px;
+            color: var(--text-primary);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            font-size: 0.8rem;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        
+        .clear-search:hover {
+            border-color: var(--red);
+            color: var(--red);
+            background: rgba(229, 9, 20, 0.1);
+        }
+        
+        .search-results-info {
+            margin: 15px 0;
+            padding: 10px 15px;
+            background: rgba(229, 9, 20, 0.1);
+            border-radius: 30px;
+            display: inline-block;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        
+        /* Table and other styles remain unchanged */
         .table-container {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.1);
             border-radius: 16px;
-            overflow: hidden;
+            overflow-x: auto;
             margin-top: 30px;
             padding: 5px;
         }
@@ -566,6 +709,7 @@ $account_types = ['user', 'staff', 'admin'];
             width: 100%;
             border-collapse: collapse;
             font-size: 0.9rem;
+            min-width: 1200px;
         }
         
         .data-table th {
@@ -594,12 +738,11 @@ $account_types = ['user', 'staff', 'admin'];
             border-bottom: none;
         }
         
-        /* Status Badges */
         .status-badge {
             display: inline-block;
             padding: 4px 12px;
             border-radius: 30px;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 1px;
@@ -647,7 +790,6 @@ $account_types = ['user', 'staff', 'admin'];
             font-weight: 700;
         }
         
-        /* Alerts */
         .alert {
             padding: 18px 25px;
             margin-bottom: 20px;
@@ -687,7 +829,6 @@ $account_types = ['user', 'staff', 'admin'];
             }
         }
         
-        /* Cinema Strip Divider */
         .cinema-strip {
             height: 2px;
             background: linear-gradient(90deg, transparent, var(--red), transparent);
@@ -695,12 +836,12 @@ $account_types = ['user', 'staff', 'admin'];
             opacity: 0.5;
         }
         
-        /* Stats Summary */
         .stats-bar {
             display: flex;
             gap: 20px;
             justify-content: flex-end;
             margin-top: 30px;
+            flex-wrap: wrap;
         }
         
         .stat-item {
@@ -738,33 +879,93 @@ $account_types = ['user', 'staff', 'admin'];
             color: #ff4444;
         }
         
-        /* Responsive */
-        @media (max-width: 1024px) {
-            .table-container {
-                overflow-x: auto;
+        .cinema-assignment {
+            background: rgba(229, 9, 20, 0.1);
+            border-radius: 8px;
+            padding: 8px;
+            margin-top: 5px;
+        }
+        
+        .cinema-select {
+            padding: 6px 10px;
+            background: rgba(10, 10, 10, 0.6);
+            border: 1px solid rgba(229, 9, 20, 0.3);
+            border-radius: 20px;
+            color: #fff;
+            font-size: 0.7rem;
+            width: 140px;
+        }
+        
+        .assign-btn {
+            padding: 4px 10px;
+            font-size: 0.65rem;
+            background: var(--red);
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .assign-btn:hover {
+            background: var(--red-dark);
+            transform: translateY(-1px);
+        }
+        
+        .assigned-cinema {
+            font-size: 0.7rem;
+            color: #44ff44;
+            margin-top: 3px;
+        }
+        
+        .not-assigned {
+            font-size: 0.7rem;
+            color: #ff8844;
+            margin-top: 3px;
+        }
+        
+        @media (max-width: 1200px) {
+            .nav-links a {
+                padding: 5px 8px;
+                font-size: 0.7rem;
             }
-            
-            .data-table {
-                min-width: 1200px;
+        }
+        
+        @media (max-width: 1024px) {
+            .nav-container {
+                padding: 0 15px;
             }
         }
         
         @media (max-width: 768px) {
+            .nav-container {
+                flex-direction: column;
+                gap: 10px;
+            }
+            .nav-links {
+                justify-content: center;
+            }
             .form-row {
                 grid-template-columns: 1fr;
             }
-            
-            .nav-links {
-                display: none;
-            }
-            
             h1 {
                 font-size: 2rem;
             }
-            
             .stats-bar {
                 flex-direction: column;
                 align-items: flex-end;
+            }
+            .action-buttons {
+                justify-content: center;
+            }
+            .search-container {
+                justify-content: center;
+            }
+            .search-form {
+                width: 100%;
+            }
+            .search-input {
+                width: 100%;
             }
         }
     </style>
@@ -778,23 +979,41 @@ $account_types = ['user', 'staff', 'admin'];
                 <a href="movies.php">Movies</a>
                 <a href="cinemas.php">Cinemas</a>
                 <a href="screenings.php">Screenings</a>
-                <a href="online_schedule.php">Schedule</a>
+                <a href="online_schedule.php">Online</a>
                 <a href="users.php" class="active">Users</a>
                 <a href="tickets.php">Tickets</a>
                 <a href="payments.php">Payments</a>
                 <a href="reports.php">Reports</a>
+                <a href="profile.php">Profile</a>
                 <a href="../auth/logout.php">Logout</a>
             </div>
         </div>
     </nav>
     
     <main class="container">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; flex-wrap: wrap; gap: 20px;">
             <h1>User Management</h1>
             <a href="?action=add" class="btn-primary">+ Add User</a>
         </div>
         
-        <!-- Cinema Strip Divider -->
+        <!-- Search Bar -->
+        <div class="search-container">
+            <form method="GET" class="search-form">
+                <input type="text" name="search" class="search-input" placeholder="Search by ID, Username, Name, Email, Type..." value="<?php echo htmlspecialchars($search_term); ?>">
+                <button type="submit" class="search-btn">🔍 Search</button>
+            </form>
+            <?php if (!empty($search_term)): ?>
+                <a href="users.php" class="clear-search">✕ Clear</a>
+            <?php endif; ?>
+        </div>
+        
+        <?php if (!empty($search_term)): ?>
+            <div class="search-results-info">
+                🔍 Showing results for: <strong>"<?php echo htmlspecialchars($search_term); ?>"</strong> | 
+                Found <strong><?php echo count($users); ?></strong> user(s)
+            </div>
+        <?php endif; ?>
+        
         <div class="cinema-strip"></div>
         
         <?php if (!empty($errors)): ?>
@@ -807,13 +1026,9 @@ $account_types = ['user', 'staff', 'admin'];
             </div>
         <?php endif; ?>
         
-        <!-- Add/Edit Form -->
         <?php if (isset($_GET['action']) || isset($_GET['edit'])): ?>
             <div class="form-container">
-                <h2>
-                    <?php echo $edit_user ? 'Edit User' : 'Add New User'; ?>
-                </h2>
-                
+                <h2><?php echo $edit_user ? 'Edit User' : 'Add New User'; ?></h2>
                 <form method="POST">
                     <?php if ($edit_user): ?>
                         <input type="hidden" name="user_id" value="<?php echo $edit_user['id']; ?>">
@@ -822,58 +1037,41 @@ $account_types = ['user', 'staff', 'admin'];
                     <div class="form-row">
                         <div class="form-group">
                             <label>First Name</label>
-                            <input type="text" name="first_name" 
-                                   value="<?php echo htmlspecialchars($edit_user['first_name'] ?? ''); ?>" 
-                                   required placeholder="Enter first name">
+                            <input type="text" name="first_name" value="<?php echo htmlspecialchars($edit_user['first_name'] ?? ''); ?>" required>
                         </div>
-                        
                         <div class="form-group">
                             <label>Last Name</label>
-                            <input type="text" name="last_name" 
-                                   value="<?php echo htmlspecialchars($edit_user['last_name'] ?? ''); ?>" 
-                                   required placeholder="Enter last name">
+                            <input type="text" name="last_name" value="<?php echo htmlspecialchars($edit_user['last_name'] ?? ''); ?>" required>
                         </div>
                     </div>
                     
                     <div class="form-row">
                         <div class="form-group">
                             <label>Username</label>
-                            <input type="text" name="username" 
-                                   value="<?php echo htmlspecialchars($edit_user['username'] ?? ''); ?>" 
-                                   required <?php echo $edit_user ? 'readonly' : ''; ?> 
-                                   placeholder="Choose a username">
+                            <input type="text" name="username" value="<?php echo htmlspecialchars($edit_user['username'] ?? ''); ?>" required <?php echo $edit_user ? 'readonly' : ''; ?>>
                             <?php if ($edit_user): ?>
                                 <small class="form-text">Username cannot be changed</small>
                             <?php endif; ?>
                         </div>
-                        
                         <div class="form-group">
                             <label>Email</label>
-                            <input type="email" name="email" 
-                                   value="<?php echo htmlspecialchars($edit_user['email'] ?? ''); ?>" 
-                                   required placeholder="user@example.com">
+                            <input type="email" name="email" value="<?php echo htmlspecialchars($edit_user['email'] ?? ''); ?>" required>
                         </div>
                     </div>
                     
                     <div class="form-row">
                         <div class="form-group">
-                            <label>
-                                <?php echo $edit_user ? 'New Password' : 'Password'; ?>
-                            </label>
-                            <input type="password" name="password" 
-                                   <?php echo !$edit_user ? 'required' : ''; ?>
-                                   placeholder="<?php echo $edit_user ? 'Leave blank to keep current' : 'Enter password'; ?>">
+                            <label><?php echo $edit_user ? 'New Password' : 'Password'; ?></label>
+                            <input type="password" name="password" <?php echo !$edit_user ? 'required' : ''; ?> placeholder="<?php echo $edit_user ? 'Leave blank to keep current' : 'Enter password'; ?>">
                             <?php if ($edit_user): ?>
                                 <small class="form-text">Minimum 6 characters if changing</small>
                             <?php endif; ?>
                         </div>
-                        
                         <div class="form-group">
                             <label>Account Type</label>
                             <select name="account_type" required>
                                 <?php foreach ($account_types as $type): ?>
-                                    <option value="<?php echo $type; ?>"
-                                        <?php echo (($edit_user['account_type'] ?? 'user') == $type) ? 'selected' : ''; ?>>
+                                    <option value="<?php echo $type; ?>" <?php echo (($edit_user['account_type'] ?? 'user') == $type) ? 'selected' : ''; ?>>
                                         <?php echo ucfirst($type); ?>
                                     </option>
                                 <?php endforeach; ?>
@@ -882,23 +1080,25 @@ $account_types = ['user', 'staff', 'admin'];
                     </div>
                     
                     <div style="display: flex; gap: 15px; margin-top: 40px;">
-                        <button type="submit" class="btn-primary">
-                            <?php echo $edit_user ? 'Update User' : 'Add User'; ?>
-                        </button>
+                        <button type="submit" class="btn-primary"><?php echo $edit_user ? 'Update User' : 'Add User'; ?></button>
                         <a href="users.php" class="btn">Cancel</a>
                     </div>
                 </form>
             </div>
-            
-            <!-- Cinema Strip Divider -->
             <div class="cinema-strip"></div>
         <?php endif; ?>
         
-        <!-- Users List -->
         <?php if (empty($users)): ?>
             <div class="alert alert-info" style="text-align: center; padding: 60px 40px; margin-top: 30px;">
-                <p style="font-size: 1.3rem; margin-bottom: 20px; color: #fff;">No users found</p>
-                <p style="color: var(--text-secondary); font-size: 1rem;">Click the "Add User" button to create your first user.</p>
+                <p style="font-size: 1.3rem; margin-bottom: 20px; color: #fff;">
+                    <?php echo !empty($search_term) ? 'No users found matching your search.' : 'No users found'; ?>
+                </p>
+                <p style="color: var(--text-secondary); font-size: 1rem;">
+                    <?php echo !empty($search_term) ? 'Try a different search term or clear the search.' : 'Click the "Add User" button to create your first user.'; ?>
+                </p>
+                <?php if (!empty($search_term)): ?>
+                    <a href="users.php" class="btn-primary" style="margin-top: 20px; display: inline-block;">View All Users</a>
+                <?php endif; ?>
             </div>
         <?php else: ?>
             <div class="table-container">
@@ -910,6 +1110,7 @@ $account_types = ['user', 'staff', 'admin'];
                             <th>Name</th>
                             <th>Email</th>
                             <th>Type</th>
+                            <th>Assigned Cinema</th>
                             <th>Status</th>
                             <th>Tickets</th>
                             <th>Payments</th>
@@ -925,11 +1126,39 @@ $account_types = ['user', 'staff', 'admin'];
                                 <td><span class="username"><?php echo htmlspecialchars($user['username']); ?></span></td>
                                 <td><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?></td>
                                 <td><?php echo htmlspecialchars($user['email']); ?></td>
+                                <td><span class="type-badge"><?php echo strtoupper($user['account_type']); ?></span></td>
+                                
+                                <!-- Assigned Cinema Column -->
                                 <td>
-                                    <span class="type-badge">
-                                        <?php echo strtoupper($user['account_type']); ?>
-                                    </span>
+                                    <?php if ($user['account_type'] == 'staff'): ?>
+                                        <?php 
+                                        $staff_cinema = getStaffCinema($user['id']);
+                                        ?>
+                                        <form method="POST" action="?assign_cinema=<?php echo $user['id']; ?><?php echo !empty($search_term) ? '&search=' . urlencode($search_term) : ''; ?>" style="display: flex; gap: 5px; align-items: center; flex-wrap: wrap;">
+                                            <select name="cinema_id" class="cinema-select">
+                                                <option value="0">-- None --</option>
+                                                <?php foreach ($all_cinemas as $cinema): ?>
+                                                    <option value="<?php echo $cinema['id']; ?>" <?php echo ($staff_cinema && $staff_cinema['id'] == $cinema['id']) ? 'selected' : ''; ?>>
+                                                        <?php echo htmlspecialchars($cinema['name']); ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <button type="submit" class="assign-btn">Assign</button>
+                                        </form>
+                                        <?php if ($staff_cinema): ?>
+                                            <div class="assigned-cinema">
+                                                ✓ Current: <?php echo htmlspecialchars($staff_cinema['name']); ?>
+                                            </div>
+                                        <?php else: ?>
+                                            <div class="not-assigned">
+                                                ⚠️ Not assigned to any cinema
+                                            </div>
+                                        <?php endif; ?>
+                                    <?php else: ?>
+                                        <span style="color: var(--text-secondary); font-size: 0.7rem;">— Not applicable —</span>
+                                    <?php endif; ?>
                                 </td>
+                                
                                 <td>
                                     <span class="status-badge <?php echo $user['is_active'] ? 'status-active' : 'status-inactive'; ?>">
                                         <?php echo $user['is_active'] ? 'Active' : 'Inactive'; ?>
@@ -937,18 +1166,16 @@ $account_types = ['user', 'staff', 'admin'];
                                 </td>
                                 <td><?php echo $user['ticket_count']; ?></td>
                                 <td><?php echo $user['payment_count']; ?></td>
-                                <td><span class="total-spent">$<?php echo number_format($user['total_spent'], 2); ?></span></td>
+                                <td><span class="total-spent">₱<?php echo number_format($user['total_spent'], 2); ?></span></td>
                                 <td><?php echo date('M d, Y', strtotime($user['created_at'])); ?></td>
                                 <td>
-                                    <div style="display: flex; gap: 3px; flex-wrap: wrap; max-width: 200px;">
-                                        <a href="?edit=<?php echo $user['id']; ?>" class="btn-small">Edit</a>
-                                        <a href="?toggle=<?php echo $user['id']; ?>" class="btn-small <?php echo $user['is_active'] ? 'delete' : 'enable'; ?>">
+                                    <div class="action-buttons">
+                                        <a href="?edit=<?php echo $user['id']; ?><?php echo !empty($search_term) ? '&search=' . urlencode($search_term) : ''; ?>" class="btn-action">Edit</a>
+                                        <a href="?toggle=<?php echo $user['id']; ?><?php echo !empty($search_term) ? '&search=' . urlencode($search_term) : ''; ?>" class="btn-action <?php echo $user['is_active'] ? 'delete' : 'enable'; ?>">
                                             <?php echo $user['is_active'] ? 'Disable' : 'Enable'; ?>
                                         </a>
-                                        <a href="payments.php?user_id=<?php echo $user['id']; ?>" class="btn-small">Payments</a>
                                         <?php if ($user['id'] != $_SESSION['user_id']): ?>
-                                            <a href="?delete=<?php echo $user['id']; ?>" class="btn-small delete" 
-                                               onclick="return confirm('Delete this user? This action cannot be undone.')">Delete</a>
+                                            <a href="?delete=<?php echo $user['id']; ?><?php echo !empty($search_term) ? '&search=' . urlencode($search_term) : ''; ?>" class="btn-action delete" onclick="return confirm('Delete this user? This action cannot be undone.')">Delete</a>
                                         <?php endif; ?>
                                     </div>
                                 </td>
@@ -958,12 +1185,12 @@ $account_types = ['user', 'staff', 'admin'];
                 </table>
             </div>
             
-            <!-- Stats Summary -->
             <div class="stats-bar">
                 <div class="stat-item">
-                    <span class="stat-label">Total Users</span>
+                    <span class="stat-label"><?php echo !empty($search_term) ? 'Search Results' : 'Total Users'; ?></span>
                     <span class="stat-value"><?php echo count($users); ?></span>
                 </div>
+                <?php if (empty($search_term)): ?>
                 <div class="stat-item">
                     <span class="stat-label">Active</span>
                     <span class="stat-value active"><?php echo count(array_filter($users, fn($u) => $u['is_active'])); ?></span>
@@ -972,6 +1199,7 @@ $account_types = ['user', 'staff', 'admin'];
                     <span class="stat-label">Inactive</span>
                     <span class="stat-value inactive"><?php echo count(array_filter($users, fn($u) => !$u['is_active'])); ?></span>
                 </div>
+                <?php endif; ?>
             </div>
         <?php endif; ?>
     </main>

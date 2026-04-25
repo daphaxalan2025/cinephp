@@ -1,5 +1,6 @@
 <?php
-// auth/register.php
+// auth/register.php - BLOCKS UNDERAGE REGISTRATION, CREATES DEFAULT PROFILE
+// UPDATED: Added parent email field and age warning banner
 require_once '../includes/functions.php';
 
 if (isLoggedIn()) {
@@ -16,7 +17,8 @@ $form_data = [
     'birthdate' => '',
     'gender' => '',
     'country' => 'PH',
-    'phone' => ''
+    'phone' => '',
+    'parent_email' => ''
 ];
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
@@ -29,7 +31,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         'birthdate' => $_POST['birthdate'] ?? '',
         'gender' => $_POST['gender'] ?? '',
         'country' => $_POST['country'] ?? 'PH',
-        'phone' => trim($_POST['phone'] ?? '')
+        'phone' => trim($_POST['phone'] ?? ''),
+        'parent_email' => trim($_POST['parent_email'] ?? '')
     ];
     
     $password = $_POST['password'] ?? '';
@@ -91,13 +94,37 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $errors[] = 'Invalid gender selection';
     }
     
-    // Phone validation (simplified for now)
+    // Phone validation
     if (empty($form_data['phone'])) {
         $errors[] = 'Phone number is required';
     } else {
         $phone = preg_replace('/[^0-9]/', '', $form_data['phone']);
         if (strlen($phone) < 10) {
             $errors[] = 'Invalid phone number';
+        }
+    }
+    
+    // ============ AGE RESTRICTION WITH PARENT EMAIL ============
+    if (empty($errors) && isset($age)) {
+        if ($age < 18) {
+            // User is under 18 - require parent email
+            if (empty($form_data['parent_email'])) {
+                $errors[] = 'Parent/Guardian email is required for users under 18.';
+            } elseif (!filter_var($form_data['parent_email'], FILTER_VALIDATE_EMAIL)) {
+                $errors[] = 'Please enter a valid parent/guardian email address.';
+            } else {
+                // Check if parent exists in system (must be adult or admin)
+                $pdo = getDB();
+                $stmt = $pdo->prepare("SELECT id, first_name, last_name FROM users WHERE email = ? AND account_type IN ('adult', 'admin')");
+                $stmt->execute([$form_data['parent_email']]);
+                $parent = $stmt->fetch();
+                
+                if (!$parent) {
+                    $errors[] = 'Parent/Guardian email not found. Please ask your parent to register first.';
+                } else {
+                    $form_data['parent_id'] = $parent['id'];
+                }
+            }
         }
     }
     
@@ -118,14 +145,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         // Hash password
         $password_hash = password_hash($password, PASSWORD_DEFAULT);
         
-        // Insert user
-        $stmt = $pdo->prepare("
-            INSERT INTO users (username, email, password_hash, first_name, last_name, 
-                              birthdate, account_type, gender, country, phone) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ");
+        // Set parent_id if provided (for underage users)
+        $parent_id = $form_data['parent_id'] ?? null;
         
+        // Insert user
         try {
+            $stmt = $pdo->prepare("
+                INSERT INTO users (
+                    username, email, password_hash, first_name, last_name, 
+                    birthdate, account_type, gender, country, phone,
+                    parent_id, cinema_id, is_active, theme_preference
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+
             $stmt->execute([
                 $form_data['username'],
                 $form_data['email'],
@@ -136,15 +168,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $account_type,
                 $form_data['gender'],
                 $form_data['country'],
-                $phone
+                $phone,
+                $parent_id,      // parent_id (null for adults, parent ID for minors)
+                null,            // cinema_id
+                1,               // is_active
+                'dark'           // theme_preference
             ]);
+            
+            // ============ CREATE DEFAULT PROFILE FOR THE NEW USER ============
+            $new_user_id = $pdo->lastInsertId();
+            $profile_stmt = $pdo->prepare("
+                INSERT INTO user_profiles (user_id, profile_name, profile_type) 
+                VALUES (?, ?, ?)
+            ");
+            $profile_stmt->execute([$new_user_id, $form_data['first_name'], $account_type]);
             
             setFlash('Registration successful! Please login.', 'success');
             header('Location: login.php');
             exit;
             
         } catch (PDOException $e) {
-            $errors[] = 'Registration failed. Please try again.';
+            $errors[] = 'Database error: ' . $e->getMessage();
         }
     }
 }
@@ -412,6 +456,36 @@ $countries = [
             border-radius: 3px;
         }
         
+        /* Age Warning Banner */
+        .age-warning {
+            background: rgba(229,9,20,0.1);
+            border: 1px solid var(--red);
+            border-radius: 16px;
+            padding: 15px 20px;
+            margin-bottom: 25px;
+        }
+        
+        .age-warning-content {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .age-warning-icon {
+            font-size: 2rem;
+        }
+        
+        .age-warning-text strong {
+            color: var(--red);
+        }
+        
+        .age-warning-text p {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-top: 5px;
+        }
+        
         /* Form Elements */
         .form-row {
             display: grid;
@@ -633,6 +707,11 @@ $countries = [
                 grid-template-columns: 1fr;
                 gap: 0;
             }
+            
+            .age-warning-content {
+                flex-direction: column;
+                text-align: center;
+            }
         }
     </style>
 </head>
@@ -650,6 +729,17 @@ $countries = [
     <div class="container">
         <div class="form-container">
             <h1>Join the Experience</h1>
+            
+            <!-- Age Warning Banner -->
+            <div class="age-warning">
+                <div class="age-warning-content">
+                    <div class="age-warning-icon">🔞</div>
+                    <div class="age-warning-text">
+                        <strong>Age Requirement</strong>
+                        <p>You must be <strong>18 years or older</strong> to register. Parents can create profiles for children under 18 after registration.</p>
+                    </div>
+                </div>
+            </div>
             
             <?php if (!empty($errors)): ?>
                 <div class="alert alert-error">
@@ -751,6 +841,18 @@ $countries = [
                                required placeholder="9123456789">
                         <small class="form-text">Enter 10 digits (will be formatted with +63)</small>
                     </div>
+                </div>
+                
+                <!-- Parent Email Field (for underage users) -->
+                <div class="form-group">
+                    <label>Parent/Guardian Email <span style="color: #ff8844;">(Required if under 18)</span></label>
+                    <input type="email" name="parent_email" 
+                           value="<?php echo htmlspecialchars($form_data['parent_email']); ?>" 
+                           placeholder="Enter parent/guardian email address">
+                    <small class="form-text" style="color: #ff8844;">
+                        ⚠️ If you are under 18, please provide your parent/guardian's email address.<br>
+                        They must have an existing CinemaTicket account.
+                    </small>
                 </div>
                 
                 <button type="submit" class="btn-primary">Create Account</button>

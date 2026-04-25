@@ -1,67 +1,62 @@
 <?php
-// staff/verify.php
+// staff/verify.php - COMPLETELY FIXED
+// Added: Proper ticket status update, online ticket detection, better error handling
 require_once '../includes/functions.php';
 requireStaff();
 
 $pdo = getDB();
 $user = getCurrentUser();
 
+autoArchiveExpiredScreenings();
+autoExpireOnlineTickets(); // <-- ADD THIS: Auto-expire online tickets
+
+// Get staff's assigned cinema from staff_cinemas table
+$staff_cinema = getStaffCinema($user['id']);
+$cinema_id = $staff_cinema ? $staff_cinema['id'] : 0;
 $result = null;
 $ticket_info = null;
-
-// Get staff's cinema (if assigned)
-$cinema_id = $user['cinema_id'] ?? 0;
+$is_online_ticket = false;
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $ticket_code = trim($_POST['ticket_code'] ?? '');
-    $action = $_POST['action'] ?? 'verify';
-    
     if (!empty($ticket_code)) {
-        // Get ticket details
-        $stmt = $pdo->prepare("
-            SELECT t.*, u.first_name, u.last_name, u.email,
-                   s.show_date, s.show_time, s.screen_number,
-                   m.title, m.duration,
-                   c.name as cinema_name, c.id as cinema_id
-            FROM tickets t
-            JOIN users u ON t.user_id = u.id
-            LEFT JOIN screenings s ON t.screening_id = s.id
-            LEFT JOIN movies m ON s.movie_id = m.id
-            LEFT JOIN cinemas c ON s.cinema_id = c.id
-            WHERE t.ticket_code = ?
-        ");
-        $stmt->execute([$ticket_code]);
-        $ticket = $stmt->fetch();
+        // First validate without updating
+        $validation = validateTicketByCode($ticket_code, $cinema_id);
         
-        if (!$ticket) {
-            $result = 'invalid';
+        if (!$validation['valid']) {
+            $result = $validation['reason'];
+            $ticket_info = $validation['ticket'] ?? null;
         } else {
-            // Check if ticket belongs to staff's cinema (if assigned)
-            if ($cinema_id && $ticket['cinema_id'] != $cinema_id) {
-                $result = 'wrong_cinema';
-                $ticket_info = $ticket;
-            }
-            // Check if expired
-            elseif ($ticket['expiry_date'] && strtotime($ticket['expiry_date']) < time()) {
-                $result = 'expired';
-                $ticket_info = $ticket;
-            }
-            // Check if already used
-            elseif ($ticket['status'] == 'used') {
-                $result = 'used';
-                $ticket_info = $ticket;
-            }
-            // Check if paid
-            elseif ($ticket['status'] != 'paid') {
-                $result = 'not_paid';
-                $ticket_info = $ticket;
-            }
-            // Valid ticket - mark as used
-            else {
-                $stmt = $pdo->prepare("UPDATE tickets SET status = 'used', used_at = NOW(), verified_by = ? WHERE id = ?");
-                $stmt->execute([$user['id'], $ticket['id']]);
-                $result = 'valid';
-                $ticket_info = $ticket;
+            $ticket_info = $validation['ticket'];
+            
+            // Check if this is an online ticket
+            if ($ticket_info['ticket_type'] == 'online') {
+                // ONLINE TICKET: Do NOT mark as used, just show info
+                $result = 'online_ticket';
+                $is_online_ticket = true;
+                // No database update for online tickets
+            } else {
+                // PHYSICAL TICKET: Mark as used for cinema entry
+                try {
+                    $pdo->beginTransaction();
+                    
+                    // Update ticket status
+                    $stmt = $pdo->prepare("UPDATE tickets SET status = 'used', used_at = NOW(), verified_by = ? WHERE id = ?");
+                    $stmt->execute([$user['id'], $ticket_info['id']]);
+                    
+                    // Update screening available seats if needed (optional, good for analytics)
+                    if ($ticket_info['screening_id']) {
+                        $stmt2 = $pdo->prepare("UPDATE screenings SET available_seats = available_seats - ? WHERE id = ?");
+                        $stmt2->execute([$ticket_info['quantity'], $ticket_info['screening_id']]);
+                    }
+                    
+                    $pdo->commit();
+                    $result = 'valid';
+                } catch (Exception $e) {
+                    $pdo->rollBack();
+                    $result = 'error';
+                    setFlash('Error updating ticket: ' . $e->getMessage(), 'error');
+                }
             }
         }
     }
@@ -76,6 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
+        /* Your existing styles remain exactly the same */
         :root {
             --black: #0a0a0a;
             --deep-gray: #1a1a1a;
@@ -91,11 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
         }
         
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
             background: var(--black);
@@ -120,7 +112,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             z-index: -1;
         }
         
-        /* Navigation */
         .navbar {
             background: rgba(10, 10, 10, 0.95);
             backdrop-filter: blur(10px);
@@ -149,27 +140,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             text-decoration: none;
             text-transform: uppercase;
             letter-spacing: 2px;
-            position: relative;
             transition: all 0.3s;
         }
+        .logo:hover { text-shadow: var(--red-glow); }
+        .logo::before { content: "🎬"; margin-right: 10px; font-size: 1.5rem; filter: drop-shadow(0 0 5px var(--red)); }
         
-        .logo:hover {
-            text-shadow: var(--red-glow);
-        }
-        
-        .logo::before {
-            content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
-            filter: drop-shadow(0 0 5px var(--red));
-        }
-        
-        .nav-links {
-            display: flex;
-            gap: 25px;
-            align-items: center;
-        }
-        
+        .nav-links { display: flex; gap: 25px; align-items: center; }
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
@@ -182,7 +158,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             letter-spacing: 1px;
             position: relative;
         }
-        
         .nav-links a::after {
             content: '';
             position: absolute;
@@ -194,29 +169,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             background: var(--red);
             transition: width 0.3s;
         }
+        .nav-links a:hover { color: var(--red); }
+        .nav-links a:hover::after { width: 60%; }
+        .nav-links a.active { color: var(--red); }
         
-        .nav-links a:hover {
-            color: var(--red);
-        }
-        
-        .nav-links a:hover::after {
-            width: 60%;
-        }
-        
-        .nav-links a.active {
-            color: var(--red);
-        }
-        
-        .nav-links a.active::after {
-            width: 60%;
-        }
-        
-        /* Main Container */
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 30px;
-        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 30px; }
         
         h1 {
             font-size: 2.5rem;
@@ -230,12 +187,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             letter-spacing: 2px;
         }
         
-        .verify-container {
-            max-width: 600px;
-            margin: 0 auto;
-        }
+        .verify-container { max-width: 600px; margin: 0 auto; }
         
-        /* Verify Form */
         .verify-form {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
@@ -265,35 +218,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             100% { transform: translateX(100%); }
         }
         
-        .verify-form h2 {
-            color: var(--red);
-            margin-bottom: 20px;
-            font-size: 1.5rem;
-        }
+        .verify-form h2 { color: var(--red); margin-bottom: 20px; font-size: 1.5rem; }
         
-        .input-group {
-            display: flex;
-            gap: 10px;
-        }
-        
+        .input-group { display: flex; gap: 10px; }
         .input-group input {
             flex: 1;
             padding: 16px 20px;
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(229,9,20,0.2);
             color: var(--text-primary);
             border-radius: 40px;
             font-size: 1.1rem;
             font-family: 'Monaco', monospace;
             transition: all 0.3s;
         }
-        
-        .input-group input:focus {
-            border-color: var(--red);
-            outline: none;
-            box-shadow: 0 0 20px rgba(229, 9, 20, 0.2);
-        }
-        
+        .input-group input:focus { border-color: var(--red); outline: none; box-shadow: 0 0 20px rgba(229,9,20,0.2); }
         .input-group button {
             padding: 16px 35px;
             background: var(--red);
@@ -306,46 +245,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             text-transform: uppercase;
             letter-spacing: 1px;
         }
+        .input-group button:hover { background: var(--red-dark); transform: translateY(-2px); box-shadow: 0 5px 20px rgba(229,9,20,0.3); }
         
-        .input-group button:hover {
-            background: var(--red-dark);
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
-        }
+        .manual-entry { margin-top: 20px; text-align: center; }
+        .manual-entry a { color: var(--red); text-decoration: none; transition: all 0.3s; position: relative; padding-bottom: 2px; }
+        .manual-entry a::after { content: ''; position: absolute; bottom: 0; left: 0; width: 0; height: 2px; background: var(--red); transition: width 0.3s; }
+        .manual-entry a:hover::after { width: 100%; }
         
-        .manual-entry {
-            margin-top: 20px;
-            text-align: center;
-        }
-        
-        .manual-entry a {
-            color: var(--red);
-            text-decoration: none;
-            transition: all 0.3s;
-            position: relative;
-            padding-bottom: 2px;
-        }
-        
-        .manual-entry a::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 0;
-            height: 2px;
-            background: var(--red);
-            transition: width 0.3s;
-        }
-        
-        .manual-entry a:hover {
-            text-shadow: 0 0 8px var(--red);
-        }
-        
-        .manual-entry a:hover::after {
-            width: 100%;
-        }
-        
-        /* Result Card */
         .result-card {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
@@ -358,19 +264,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             position: relative;
             overflow: hidden;
         }
-        
-        .result-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
-            animation: slideBorder 3s infinite;
-        }
-        
         .result-valid { border-color: #44ff44; }
+        .result-online { border-color: #00ffff; }
         .result-invalid { border-color: #ff4444; }
         .result-warning { border-color: #ffff44; }
         
@@ -380,79 +275,40 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         .ticket-details {
             margin-top: 30px;
             padding: 25px;
-            background: rgba(0, 0, 0, 0.3);
+            background: rgba(0,0,0,0.3);
             border-radius: 16px;
             text-align: left;
         }
+        .detail-row { display: flex; padding: 12px 0; border-bottom: 1px solid rgba(229,9,20,0.1); }
+        .detail-label { width: 120px; color: var(--text-secondary); font-size: 0.85rem; }
+        .detail-value { flex: 1; color: #fff; font-weight: 500; }
+        .detail-value.highlight { color: var(--red); font-weight: 600; }
         
-        .ticket-details h3 {
-            color: var(--red);
-            margin-bottom: 15px;
-        }
-        
-        .detail-row {
-            display: flex;
-            padding: 12px 0;
-            border-bottom: 1px solid rgba(229, 9, 20, 0.1);
-        }
-        
-        .detail-label {
-            width: 120px;
-            color: var(--text-secondary);
-            font-size: 0.85rem;
-        }
-        
-        .detail-value {
-            flex: 1;
-            color: #fff;
-            font-weight: 500;
-        }
-        
-        .detail-value.highlight {
-            color: var(--red);
+        .online-notice {
+            background: rgba(0, 255, 255, 0.1);
+            border: 1px solid #00ffff;
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: center;
+            color: #00ffff;
             font-weight: 600;
         }
         
-        /* Quick Guide */
         .quick-guide {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            border: 1px solid rgba(229,9,20,0.2);
             border-radius: 16px;
             padding: 20px;
         }
+        .quick-guide h3 { color: var(--red); margin-bottom: 15px; }
+        .guide-item { display: flex; align-items: center; gap: 15px; padding: 10px; border-bottom: 1px solid rgba(229,9,20,0.1); }
+        .guide-item:last-child { border-bottom: none; }
+        .guide-icon { font-size: 1.5rem; }
+        .guide-item strong { color: var(--red); }
         
-        .quick-guide h3 {
-            color: var(--red);
-            margin-bottom: 15px;
-        }
-        
-        .guide-item {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            padding: 10px;
-            border-bottom: 1px solid rgba(229, 9, 20, 0.1);
-        }
-        
-        .guide-item:last-child {
-            border-bottom: none;
-        }
-        
-        .guide-icon {
-            font-size: 1.5rem;
-        }
-        
-        .guide-item span:last-child {
-            color: var(--text-secondary);
-        }
-        
-        .guide-item strong {
-            color: var(--red);
-        }
-        
-        /* Cinema Strip Divider */
         .cinema-strip {
             height: 2px;
             background: linear-gradient(90deg, transparent, var(--red), transparent);
@@ -460,32 +316,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             opacity: 0.3;
         }
         
-        /* Responsive */
         @media (max-width: 768px) {
-            .nav-links {
-                display: none;
-            }
-            
-            h1 {
-                font-size: 2rem;
-            }
-            
-            .input-group {
-                flex-direction: column;
-            }
-            
-            .input-group button {
-                width: 100%;
-            }
-            
-            .detail-row {
-                flex-direction: column;
-                gap: 5px;
-            }
-            
-            .detail-label {
-                width: auto;
-            }
+            .nav-links { display: none; }
+            h1 { font-size: 2rem; }
+            .input-group { flex-direction: column; }
+            .detail-row { flex-direction: column; gap: 5px; }
+            .detail-label { width: auto; }
         }
     </style>
 </head>
@@ -509,139 +345,161 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <main class="container">
         <div class="verify-container">
             <h1>Verify Ticket</h1>
-            
-            <!-- Cinema Strip Divider -->
             <div class="cinema-strip"></div>
             
             <div class="verify-form">
                 <h2>Manual Entry</h2>
                 <form method="POST" id="verifyForm">
                     <div class="input-group">
-                        <input type="text" name="ticket_code" id="ticket_code" 
-                               placeholder="Enter ticket code (e.g., TIX123456789)" 
-                               value="<?php echo htmlspecialchars($_POST['ticket_code'] ?? ''); ?>"
-                               autofocus required>
+                        <input type="text" name="ticket_code" id="ticket_code" placeholder="Enter ticket code (e.g., TIX-XXXXX-YYYYMMDD)" value="<?php echo htmlspecialchars($_POST['ticket_code'] ?? ''); ?>" autofocus required>
                         <button type="submit">Verify</button>
                     </div>
                 </form>
-                
-                <div class="manual-entry">
-                    <a href="scan.php">📱 Switch to QR Scanner</a>
-                </div>
+                <div class="manual-entry"><a href="scan.php">📱 Switch to QR Scanner</a></div>
             </div>
             
             <?php if ($result && $ticket_info): ?>
-                <div class="result-card result-<?php 
-                    echo $result == 'valid' ? 'valid' : ($result == 'used' || $result == 'expired' ? 'warning' : 'invalid'); 
-                ?>">
-                    <?php if ($result == 'valid'): ?>
-                        <div class="result-icon">✅</div>
-                        <div class="result-title" style="color: #44ff44;">VALID TICKET</div>
-                        <p style="color: var(--text-secondary);">Welcome to the cinema! Ticket has been marked as used.</p>
-                        
+                <?php if ($result == 'online_ticket'): ?>
+                    <!-- ONLINE TICKET - Just display info, DO NOT mark as used -->
+                    <div class="result-card result-online">
+                        <div class="result-icon">💻</div>
+                        <div class="result-title" style="color:#00ffff;">ONLINE STREAMING TICKET</div>
+                        <p style="color: var(--text-secondary);">This ticket is for online streaming only. No physical entry verification needed.</p>
                         <div class="ticket-details">
-                            <h3>Ticket Details</h3>
+                            <h3 style="color: #00ffff; margin-bottom:15px;">Ticket Information</h3>
                             <div class="detail-row">
                                 <span class="detail-label">Ticket Code:</span>
-                                <span class="detail-value highlight"><?php echo $ticket_info['ticket_code']; ?></span>
+                                <span class="detail-value highlight"><?php echo htmlspecialchars($ticket_info['ticket_code'] ?? ''); ?></span>
                             </div>
                             <div class="detail-row">
                                 <span class="detail-label">Customer:</span>
-                                <span class="detail-value"><?php echo htmlspecialchars($ticket_info['first_name'] . ' ' . $ticket_info['last_name']); ?></span>
+                                <span class="detail-value"><?php echo htmlspecialchars(($ticket_info['first_name'] ?? '') . ' ' . ($ticket_info['last_name'] ?? '')); ?></span>
                             </div>
                             <div class="detail-row">
                                 <span class="detail-label">Movie:</span>
-                                <span class="detail-value"><?php echo htmlspecialchars($ticket_info['title']); ?></span>
+                                <span class="detail-value"><?php echo htmlspecialchars($ticket_info['title'] ?? ''); ?></span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Streaming Date:</span>
+                                <span class="detail-value"><?php echo isset($ticket_info['show_date']) ? date('F d, Y', strtotime($ticket_info['show_date'])) : 'N/A'; ?></span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Streaming Time:</span>
+                                <span class="detail-value"><?php echo isset($ticket_info['show_time']) ? date('h:i A', strtotime($ticket_info['show_time'])) : 'N/A'; ?></span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Expires:</span>
+                                <span class="detail-value"><?php echo isset($ticket_info['week_expiry']) ? date('F d, Y', strtotime($ticket_info['week_expiry'])) : 'N/A'; ?></span>
+                            </div>
+                        </div>
+                        <div class="online-notice">
+                            💻 This ticket is for online streaming only.<br>
+                            Customer can watch from home via our website.<br>
+                            <strong>No action needed from staff.</strong>
+                        </div>
+                    </div>
+                    
+                <?php elseif ($result == 'valid'): ?>
+                    <!-- PHYSICAL TICKET - Valid and marked as used -->
+                    <div class="result-card result-valid">
+                        <div class="result-icon">✅</div>
+                        <div class="result-title" style="color:#44ff44;">VALID TICKET - ENTRY GRANTED</div>
+                        <p style="color: var(--text-secondary);">Ticket has been verified and marked as used.</p>
+                        <div class="ticket-details">
+                            <h3 style="color: var(--red); margin-bottom:15px;">Ticket Details</h3>
+                            <div class="detail-row">
+                                <span class="detail-label">Ticket Code:</span>
+                                <span class="detail-value highlight"><?php echo htmlspecialchars($ticket_info['ticket_code'] ?? ''); ?></span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Customer:</span>
+                                <span class="detail-value"><?php echo htmlspecialchars(($ticket_info['first_name'] ?? '') . ' ' . ($ticket_info['last_name'] ?? '')); ?></span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Movie:</span>
+                                <span class="detail-value"><?php echo htmlspecialchars($ticket_info['title'] ?? ''); ?></span>
                             </div>
                             <div class="detail-row">
                                 <span class="detail-label">Cinema:</span>
-                                <span class="detail-value"><?php echo htmlspecialchars($ticket_info['cinema_name']); ?> (Screen <?php echo $ticket_info['screen_number']; ?>)</span>
+                                <span class="detail-value"><?php echo htmlspecialchars($ticket_info['cinema_name'] ?? ''); ?> (Screen <?php echo htmlspecialchars($ticket_info['screen_number'] ?? ''); ?>)</span>
                             </div>
                             <div class="detail-row">
                                 <span class="detail-label">Date/Time:</span>
-                                <span class="detail-value"><?php echo date('M d, Y h:i A', strtotime($ticket_info['show_date'] . ' ' . $ticket_info['show_time'])); ?></span>
+                                <span class="detail-value"><?php echo isset($ticket_info['show_date']) && isset($ticket_info['show_time']) ? date('M d, Y h:i A', strtotime($ticket_info['show_date'] . ' ' . $ticket_info['show_time'])) : 'N/A'; ?></span>
                             </div>
                             <div class="detail-row">
                                 <span class="detail-label">Seats:</span>
-                                <span class="detail-value"><?php echo $ticket_info['seat_numbers'] ?: 'N/A'; ?></span>
+                                <span class="detail-value"><?php echo htmlspecialchars($ticket_info['seat_numbers'] ?? 'N/A'); ?></span>
                             </div>
                             <div class="detail-row">
-                                <span class="detail-label">Ticket Type:</span>
-                                <span class="detail-value"><?php echo ucfirst($ticket_info['ticket_type']); ?></span>
+                                <span class="detail-label">Amount Paid:</span>
+                                <span class="detail-value highlight">₱<?php echo number_format($ticket_info['total_price'] ?? 0, 2); ?></span>
                             </div>
                         </div>
-                        
-                    <?php elseif ($result == 'used'): ?>
+                    </div>
+                    
+                <?php elseif ($result == 'used'): ?>
+                    <div class="result-card result-warning">
                         <div class="result-icon">⚠️</div>
-                        <div class="result-title" style="color: #ffff44;">TICKET ALREADY USED</div>
-                        <p style="color: var(--text-secondary);">This ticket was used on <?php echo date('M d, Y h:i A', strtotime($ticket_info['used_at'])); ?></p>
-                        
-                    <?php elseif ($result == 'expired'): ?>
+                        <div class="result-title" style="color:#ffff44;">TICKET ALREADY USED</div>
+                        <p>This ticket was already scanned on: <?php echo isset($ticket_info['used_at']) ? date('M d, Y h:i A', strtotime($ticket_info['used_at'])) : 'Unknown date'; ?></p>
+                    </div>
+                <?php elseif ($result == 'expired'): ?>
+                    <div class="result-card result-warning">
                         <div class="result-icon">⌛</div>
-                        <div class="result-title" style="color: #ffff44;">TICKET EXPIRED</div>
-                        <p style="color: var(--text-secondary);">This ticket expired on <?php echo date('M d, Y h:i A', strtotime($ticket_info['expiry_date'])); ?></p>
-                        
-                    <?php elseif ($result == 'not_paid'): ?>
+                        <div class="result-title" style="color:#ffff44;">TICKET EXPIRED</div>
+                        <p>This ticket has expired and is no longer valid.</p>
+                    </div>
+                <?php elseif ($result == 'not_paid'): ?>
+                    <div class="result-card result-invalid">
                         <div class="result-icon">💰</div>
-                        <div class="result-title" style="color: #ff4444;">PAYMENT PENDING</div>
-                        <p style="color: var(--text-secondary);">This ticket has not been paid for yet.</p>
-                        
-                    <?php elseif ($result == 'wrong_cinema'): ?>
+                        <div class="result-title" style="color:#ff4444;">PAYMENT PENDING</div>
+                        <p>This ticket has not been paid for yet.</p>
+                    </div>
+                <?php elseif ($result == 'wrong_cinema'): ?>
+                    <div class="result-card result-invalid">
                         <div class="result-icon">🏛️</div>
-                        <div class="result-title" style="color: #ff4444;">WRONG CINEMA</div>
-                        <p style="color: var(--text-secondary);">This ticket is for a different cinema location.</p>
-                        <p style="color: var(--red); margin-top:10px;">Ticket cinema: <?php echo htmlspecialchars($ticket_info['cinema_name']); ?></p>
-                        
-                    <?php endif; ?>
-                </div>
-                
-            <?php elseif ($result == 'invalid'): ?>
+                        <div class="result-title" style="color:#ff4444;">WRONG CINEMA</div>
+                        <p>This ticket is for a different cinema location.</p>
+                    </div>
+                <?php elseif ($result == 'error'): ?>
+                    <div class="result-card result-invalid">
+                        <div class="result-icon">❌</div>
+                        <div class="result-title" style="color:#ff4444;">SYSTEM ERROR</div>
+                        <p>An error occurred while processing this ticket. Please try again or contact support.</p>
+                    </div>
+                <?php endif; ?>
+            <?php elseif ($result == 'not_found'): ?>
                 <div class="result-card result-invalid">
                     <div class="result-icon">❌</div>
-                    <div class="result-title" style="color: #ff4444;">INVALID TICKET</div>
-                    <p style="color: var(--text-secondary);">The ticket code you entered was not found in our system.</p>
+                    <div class="result-title" style="color:#ff4444;">INVALID TICKET</div>
+                    <p>Ticket code not found in system.</p>
                 </div>
             <?php endif; ?>
             
             <div class="quick-guide">
                 <h3>Quick Guide</h3>
-                <div class="guide-item">
-                    <span class="guide-icon">✅</span>
-                    <span><strong>Valid</strong> - Green border, allow entry</span>
-                </div>
-                <div class="guide-item">
-                    <span class="guide-icon">⚠️</span>
-                    <span><strong>Used/Expired</strong> - Yellow border, deny entry</span>
-                </div>
-                <div class="guide-item">
-                    <span class="guide-icon">❌</span>
-                    <span><strong>Invalid/Not Paid</strong> - Red border, deny entry</span>
-                </div>
-                <div class="guide-item">
-                    <span class="guide-icon">🏛️</span>
-                    <span><strong>Wrong Cinema</strong> - Ticket is for different location</span>
-                </div>
+                <div class="guide-item"><span class="guide-icon">✅</span><span><strong>Valid (Green)</strong> - Physical ticket, allow entry</span></div>
+                <div class="guide-item"><span class="guide-icon">💻</span><span><strong>Online (Cyan)</strong> - Streaming ticket, inform customer</span></div>
+                <div class="guide-item"><span class="guide-icon">⚠️</span><span><strong>Used/Expired (Yellow)</strong> - Deny entry</span></div>
+                <div class="guide-item"><span class="guide-icon">❌</span><span><strong>Invalid/Not Paid (Red)</strong> - Deny entry</span></div>
             </div>
         </div>
     </main>
     
     <script>
-        // Auto-submit on paste (for barcode scanner)
-        document.getElementById('ticket_code').addEventListener('paste', function(e) {
-            setTimeout(() => {
-                document.getElementById('verifyForm').submit();
-            }, 100);
+        document.getElementById('ticket_code').addEventListener('paste', function(e) { 
+            setTimeout(() => { 
+                document.getElementById('verifyForm').submit(); 
+            }, 100); 
         });
-        
-        // Keyboard shortcut (Ctrl+F to focus)
-        document.addEventListener('keydown', function(e) {
-            if (e.ctrlKey && e.key === 'f') {
-                e.preventDefault();
-                document.getElementById('ticket_code').focus();
-            }
+        document.addEventListener('keydown', function(e) { 
+            if (e.ctrlKey && e.key === 'f') { 
+                e.preventDefault(); 
+                document.getElementById('ticket_code').focus(); 
+            } 
         });
     </script>
-    
     <script src="../assets/js/script.js"></script>
 </body>
 </html>

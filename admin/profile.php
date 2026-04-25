@@ -6,69 +6,101 @@ requireAdmin();
 $pdo = getDB();
 $user = getCurrentUser();
 $errors = [];
-$success = '';
 
-// Handle profile update
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    if (isset($_POST['update_profile'])) {
-        $first_name = trim($_POST['first_name'] ?? '');
-        $last_name = trim($_POST['last_name'] ?? '');
-        $email = trim($_POST['email'] ?? '');
-        $phone = trim($_POST['phone'] ?? '');
+// Handle profile picture upload
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['profile_pic']) && $_FILES['profile_pic']['size'] > 0) {
+    $target_dir = UPLOAD_PATH . 'profiles/';
+    
+    if (!file_exists($target_dir)) {
+        mkdir($target_dir, 0777, true);
+    }
+    
+    $allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+    $max_size = 2 * 1024 * 1024;
+    
+    if (!in_array($_FILES['profile_pic']['type'], $allowed_types)) {
+        $errors[] = 'Invalid file type. Only JPG, PNG and GIF are allowed.';
+    } elseif ($_FILES['profile_pic']['size'] > $max_size) {
+        $errors[] = 'File too large. Maximum size is 2MB.';
+    } else {
+        $ext = pathinfo($_FILES['profile_pic']['name'], PATHINFO_EXTENSION);
+        $filename = 'profile_' . $user['id'] . '_' . time() . '.' . $ext;
+        $target_file = $target_dir . $filename;
         
-        // Validation
-        if (empty($first_name)) $errors[] = 'First name is required';
-        if (empty($last_name)) $errors[] = 'Last name is required';
-        if (empty($email)) $errors[] = 'Email is required';
-        elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Invalid email format';
-        
-        // Check if email exists (excluding current user)
-        if ($email != $user['email']) {
-            $check = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
-            $check->execute([$email, $user['id']]);
-            if ($check->fetch()) {
-                $errors[] = 'Email already exists';
-            }
-        }
-        
-        if (empty($errors)) {
-            $phone = preg_replace('/[^0-9]/', '', $phone);
-            if (strlen($phone) == 10) {
-                $phone = '+63' . $phone;
+        if (move_uploaded_file($_FILES['profile_pic']['tmp_name'], $target_file)) {
+            // Delete old profile picture if exists
+            if ($user['profile_pic'] && file_exists($target_dir . $user['profile_pic'])) {
+                unlink($target_dir . $user['profile_pic']);
             }
             
-            $stmt = $pdo->prepare("UPDATE users SET first_name=?, last_name=?, email=?, phone=? WHERE id=?");
-            if ($stmt->execute([$first_name, $last_name, $email, $phone, $user['id']])) {
-                setFlash('Profile updated successfully', 'success');
-                header('Location: profile.php');
-                exit;
-            }
+            $stmt = $pdo->prepare("UPDATE users SET profile_pic = ? WHERE id = ?");
+            $stmt->execute([$filename, $user['id']]);
+            setFlash('Profile picture updated', 'success');
+            header('Location: profile.php');
+            exit;
+        } else {
+            $errors[] = 'Failed to upload file.';
+        }
+    }
+}
+
+// Handle profile update
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_profile'])) {
+    $first_name = trim($_POST['first_name'] ?? '');
+    $last_name = trim($_POST['last_name'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $phone = trim($_POST['phone'] ?? '');
+    
+    if (empty($first_name)) $errors[] = 'First name is required';
+    if (empty($last_name)) $errors[] = 'Last name is required';
+    if (empty($email)) $errors[] = 'Email is required';
+    elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Invalid email format';
+    
+    if ($email != $user['email']) {
+        $check = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
+        $check->execute([$email, $user['id']]);
+        if ($check->fetch()) {
+            $errors[] = 'Email already exists';
         }
     }
     
-    if (isset($_POST['change_password'])) {
-        $current = $_POST['current_password'] ?? '';
-        $new = $_POST['new_password'] ?? '';
-        $confirm = $_POST['confirm_password'] ?? '';
+    if (empty($errors)) {
+        $phone = preg_replace('/[^0-9]/', '', $phone);
+        if (strlen($phone) == 10) {
+            $phone = '+63' . $phone;
+        }
         
-        if (empty($current)) $errors[] = 'Current password is required';
-        if (empty($new)) $errors[] = 'New password is required';
-        elseif (strlen($new) < 6) $errors[] = 'New password must be at least 6 characters';
-        if ($new !== $confirm) $errors[] = 'Passwords do not match';
-        
-        if (empty($errors)) {
-            // Verify current password
-            if (password_verify($current, $user['password_hash'])) {
-                $hash = password_hash($new, PASSWORD_DEFAULT);
-                $stmt = $pdo->prepare("UPDATE users SET password_hash=? WHERE id=?");
-                if ($stmt->execute([$hash, $user['id']])) {
-                    setFlash('Password changed successfully', 'success');
-                    header('Location: profile.php');
-                    exit;
-                }
-            } else {
-                $errors[] = 'Current password is incorrect';
+        $stmt = $pdo->prepare("UPDATE users SET first_name=?, last_name=?, email=?, phone=? WHERE id=?");
+        if ($stmt->execute([$first_name, $last_name, $email, $phone, $user['id']])) {
+            setFlash('Profile updated successfully', 'success');
+            header('Location: profile.php');
+            exit;
+        }
+    }
+}
+
+// Handle password change
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['change_password'])) {
+    $current = $_POST['current_password'] ?? '';
+    $new = $_POST['new_password'] ?? '';
+    $confirm = $_POST['confirm_password'] ?? '';
+    
+    if (empty($current)) $errors[] = 'Current password is required';
+    if (empty($new)) $errors[] = 'New password is required';
+    elseif (strlen($new) < 6) $errors[] = 'New password must be at least 6 characters';
+    if ($new !== $confirm) $errors[] = 'Passwords do not match';
+    
+    if (empty($errors)) {
+        if (password_verify($current, $user['password_hash'])) {
+            $hash = password_hash($new, PASSWORD_DEFAULT);
+            $stmt = $pdo->prepare("UPDATE users SET password_hash=? WHERE id=?");
+            if ($stmt->execute([$hash, $user['id']])) {
+                setFlash('Password changed successfully', 'success');
+                header('Location: profile.php');
+                exit;
             }
+        } else {
+            $errors[] = 'Current password is incorrect';
         }
     }
 }
@@ -95,6 +127,9 @@ $recent_activity = $pdo->query("
      ORDER BY created_at DESC LIMIT 5)
     ORDER BY date DESC LIMIT 10
 ")->fetchAll();
+
+// Display flash messages if any
+$flash = getFlash();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -149,46 +184,37 @@ $recent_activity = $pdo->query("
             z-index: -1;
         }
         
-        /* Glassmorphism Base */
-        .glass {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid var(--glass-border);
-            border-radius: 12px;
-        }
-        
         /* Navigation */
         .navbar {
             background: rgba(10, 10, 10, 0.95);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
+            padding: 0.8rem 0;
             position: sticky;
             top: 0;
             z-index: 1000;
         }
         
         .nav-container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 20px;
         }
         
         .logo {
             color: var(--red);
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             font-weight: 800;
             font-family: 'Montserrat', sans-serif;
             text-decoration: none;
             text-transform: uppercase;
-            letter-spacing: 2px;
-            position: relative;
+            letter-spacing: 1.5px;
             transition: all 0.3s;
+            white-space: nowrap;
         }
         
         .logo:hover {
@@ -197,28 +223,31 @@ $recent_activity = $pdo->query("
         
         .logo::before {
             content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
+            margin-right: 8px;
+            font-size: 1.2rem;
             filter: drop-shadow(0 0 5px var(--red));
         }
         
         .nav-links {
             display: flex;
-            gap: 25px;
+            gap: 5px;
             align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
         }
         
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             transition: all 0.3s;
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             position: relative;
+            white-space: nowrap;
         }
         
         .nav-links a::after {
@@ -251,20 +280,13 @@ $recent_activity = $pdo->query("
         
         /* Main Container */
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
-            padding: 30px;
-        }
-        
-        /* Headers */
-        h1, h2, h3, h4 {
-            font-family: 'Montserrat', sans-serif;
-            font-weight: 700;
-            letter-spacing: 1px;
+            padding: 30px 20px;
         }
         
         h1 {
-            font-size: 3rem;
+            font-size: 2.8rem;
             font-weight: 800;
             background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
             -webkit-background-clip: text;
@@ -291,7 +313,6 @@ $recent_activity = $pdo->query("
             border-radius: 24px;
             padding: 30px;
             text-align: center;
-            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
             position: relative;
             overflow: hidden;
         }
@@ -313,40 +334,61 @@ $recent_activity = $pdo->query("
             100% { transform: translateX(100%); }
         }
         
+        .profile-avatar-container {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            margin: 0 auto 20px;
+        }
+        
         .profile-avatar {
             width: 150px;
             height: 150px;
+            border-radius: 50%;
+            border: 3px solid var(--red);
+            object-fit: cover;
+            box-shadow: 0 0 30px rgba(229, 9, 20, 0.3);
+        }
+        
+        .profile-avatar-placeholder {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
             background: rgba(229, 9, 20, 0.1);
             border: 3px solid var(--red);
-            border-radius: 50%;
-            margin: 0 auto 20px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 4rem;
+            font-size: 3rem;
             font-weight: 700;
             color: var(--red);
             font-family: 'Montserrat', sans-serif;
-            box-shadow: 0 0 30px rgba(229, 9, 20, 0.3);
-            position: relative;
-            overflow: hidden;
         }
         
-        .profile-avatar::after {
-            content: '';
+        .upload-btn {
             position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(229, 9, 20, 0.2) 0%, transparent 70%);
-            opacity: 0;
-            transition: opacity 0.3s;
+            bottom: 5px;
+            right: 5px;
+            background: var(--red);
+            color: #fff;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: 2px solid var(--black);
+            transition: all 0.3s;
+            box-shadow: 0 0 20px rgba(229, 9, 20, 0.3);
         }
         
-        .profile-avatar:hover::after {
-            opacity: 1;
+        .upload-btn:hover {
+            transform: scale(1.1) rotate(90deg);
+            box-shadow: 0 0 30px rgba(229, 9, 20, 0.5);
         }
+        
+        #profile_pic { display: none; }
         
         .profile-name {
             font-size: 1.8rem;
@@ -438,10 +480,8 @@ $recent_activity = $pdo->query("
             border: 1px solid rgba(229, 9, 20, 0.2);
             border-radius: 24px;
             padding: 30px;
-            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
         }
         
-        /* Tab Buttons */
         .tab-buttons {
             display: flex;
             gap: 10px;
@@ -562,7 +602,6 @@ $recent_activity = $pdo->query("
             padding-left: 15px;
         }
         
-        /* Buttons */
         .btn-primary {
             background: var(--red);
             color: #fff;
@@ -572,7 +611,7 @@ $recent_activity = $pdo->query("
             letter-spacing: 1.5px;
             text-transform: uppercase;
             font-size: 0.9rem;
-            padding: 14px 32px;
+            padding: 14px 28px;
             border-radius: 40px;
             transition: all 0.3s;
             box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
@@ -668,17 +707,24 @@ $recent_activity = $pdo->query("
             margin-bottom: 20px;
             border-radius: 40px;
             animation: slideIn 0.3s ease;
-            border-left: 4px solid;
-            font-weight: 400;
             background: rgba(10, 10, 10, 0.8);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.2);
         }
         
+        .alert-success {
+            border-left: 4px solid #00c853;
+            color: #69f0ae;
+        }
+        
         .alert-error {
-            border-left-color: var(--red);
+            border-left: 4px solid var(--red);
             color: #ff6b6b;
+        }
+        
+        .alert-error ul {
+            margin-left: 20px;
         }
         
         @keyframes slideIn {
@@ -693,15 +739,31 @@ $recent_activity = $pdo->query("
         }
         
         /* Responsive */
+        @media (max-width: 1200px) {
+            .nav-links a {
+                padding: 5px 8px;
+                font-size: 0.7rem;
+            }
+        }
+        
         @media (max-width: 1024px) {
+            .nav-container {
+                padding: 0 15px;
+            }
+            
             .profile-container {
                 grid-template-columns: 1fr;
             }
         }
         
         @media (max-width: 768px) {
+            .nav-container {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
             .nav-links {
-                display: none;
+                justify-content: center;
             }
             
             h1 {
@@ -745,9 +807,15 @@ $recent_activity = $pdo->query("
     <main class="container">
         <h1>Admin Profile</h1>
         
+        <?php if ($flash): ?>
+            <div class="alert alert-<?php echo $flash['type']; ?>">
+                <?php echo htmlspecialchars($flash['message']); ?>
+            </div>
+        <?php endif; ?>
+        
         <?php if (!empty($errors)): ?>
             <div class="alert alert-error">
-                <ul style="margin-left: 20px;">
+                <ul style="margin-bottom: 0;">
                     <?php foreach ($errors as $error): ?>
                         <li><?php echo htmlspecialchars($error); ?></li>
                     <?php endforeach; ?>
@@ -758,9 +826,21 @@ $recent_activity = $pdo->query("
         <div class="profile-container">
             <!-- Sidebar -->
             <div class="profile-sidebar">
-                <div class="profile-avatar">
-                    <?php echo strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1)); ?>
+                <div class="profile-avatar-container">
+                    <?php if ($user['profile_pic']): ?>
+                        <img src="../uploads/profiles/<?php echo $user['profile_pic']; ?>?t=<?php echo time(); ?>" class="profile-avatar">
+                    <?php else: ?>
+                        <div class="profile-avatar-placeholder">
+                            <?php echo strtoupper(substr($user['first_name'],0,1) . substr($user['last_name'],0,1)); ?>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <form method="POST" enctype="multipart/form-data" id="picForm">
+                        <label for="profile_pic" class="upload-btn">📷</label>
+                        <input type="file" id="profile_pic" name="profile_pic" accept="image/*" onchange="document.getElementById('picForm').submit()">
+                    </form>
                 </div>
+                
                 <div class="profile-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?></div>
                 <div class="profile-username">@<?php echo htmlspecialchars($user['username']); ?></div>
                 <div class="profile-badge">Administrator</div>
@@ -905,25 +985,14 @@ $recent_activity = $pdo->query("
         </div>
     </main>
     
-    <script src="../assets/js/script.js"></script>
     <script>
         function showTab(tabId, element) {
-            // Hide all tabs
-            document.querySelectorAll('.tab-pane').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            
-            // Remove active class from all buttons
-            document.querySelectorAll('.tab-button').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            
-            // Show selected tab
+            document.querySelectorAll('.tab-pane').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
-            
-            // Add active class to clicked button
             element.classList.add('active');
         }
     </script>
+    <script src="../assets/js/script.js"></script>
 </body>
 </html>

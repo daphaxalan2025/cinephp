@@ -1,5 +1,15 @@
 <?php
-// admin/tickets.php
+// Start session FIRST before anything else
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Debug - remove after fixing
+error_log("=== TICKET STATUS UPDATE DEBUG ===");
+error_log("Session ID: " . session_id());
+error_log("Session user_id: " . ($_SESSION['user_id'] ?? 'NOT SET'));
+
+// admin/tickets.php - FIXED: sets used_at and verified_by when marking as used, added cancelled status
 require_once '../includes/functions.php';
 requireAdmin();
 
@@ -10,17 +20,61 @@ if (isset($_GET['update_status'])) {
     $ticket_id = $_GET['update_status'];
     $new_status = $_GET['status'] ?? 'paid';
     
+    // Get user ID from session with fallback
+    $user_id = $_SESSION['user_id'] ?? 0;
+    
+    // If still 0, try to get from getCurrentUser()
+    if ($user_id == 0) {
+        $current_user = getCurrentUser();
+        $user_id = $current_user['id'] ?? 0;
+        error_log("Fetched user_id from getCurrentUser(): " . $user_id);
+    }
+    
+    error_log("Updating ticket $ticket_id to status: $new_status by user_id: $user_id");
+    
     try {
-        $stmt = $pdo->prepare("UPDATE tickets SET status = ? WHERE id = ?");
-        if ($stmt->execute([$new_status, $ticket_id])) {
+        if ($new_status == 'used') {
+            $stmt = $pdo->prepare("UPDATE tickets SET status = ?, used_at = NOW(), verified_by = ? WHERE id = ?");
+            $stmt->execute([$new_status, $user_id, $ticket_id]);
+            error_log("Used update affected rows: " . $stmt->rowCount());
+        } elseif ($new_status == 'cancelled') {
+            $stmt = $pdo->prepare("UPDATE tickets SET status = ?, cancelled_at = NOW(), cancelled_by = ? WHERE id = ?");
+            $stmt->execute([$new_status, $user_id, $ticket_id]);
+            error_log("Cancelled update affected rows: " . $stmt->rowCount());
+            
+            // Handle linked payment if exists
+            $stmt = $pdo->prepare("SELECT id, payment_status FROM payments WHERE ticket_id = ?");
+            $stmt->execute([$ticket_id]);
+            $payment = $stmt->fetch();
+            
+            if ($payment) {
+                if ($payment['payment_status'] == 'completed') {
+                    $stmt = $pdo->prepare("UPDATE payments SET payment_status = 'refund_pending' WHERE id = ?");
+                    $stmt->execute([$payment['id']]);
+                    setFlash('Ticket cancelled. Payment marked for refund.', 'warning');
+                } elseif ($payment['payment_status'] == 'pending') {
+                    $stmt = $pdo->prepare("UPDATE payments SET payment_status = 'cancelled' WHERE id = ?");
+                    $stmt->execute([$payment['id']]);
+                    setFlash('Ticket cancelled. Pending payment cancelled.', 'success');
+                }
+            }
+        } else {
+            $stmt = $pdo->prepare("UPDATE tickets SET status = ? WHERE id = ?");
+            $stmt->execute([$new_status, $ticket_id]);
+            error_log("Status update affected rows: " . $stmt->rowCount());
+        }
+        
+        if ($new_status != 'cancelled') {
             setFlash("Ticket status updated to $new_status", 'success');
         }
     } catch (PDOException $e) {
+        error_log("Error updating ticket: " . $e->getMessage());
         setFlash('Error: ' . $e->getMessage(), 'error');
     }
     header('Location: tickets.php');
     exit;
 }
+
 
 // ============ FILTERS ============
 $status_filter = $_GET['status'] ?? '';
@@ -33,15 +87,27 @@ $date_to = $_GET['date_to'] ?? '';
 $sql = "
     SELECT t.*, 
            u.username, u.first_name, u.last_name, u.email,
-           m.title, m.poster,
-           s.show_date, s.show_time,
+           CASE 
+               WHEN t.ticket_type = 'cinema' THEN m.title
+               WHEN t.ticket_type = 'online' THEN om.title
+               ELSE 'N/A'
+           END as title,
+           CASE 
+               WHEN t.ticket_type = 'cinema' THEN m.poster
+               WHEN t.ticket_type = 'online' THEN om.poster
+               ELSE NULL
+           END as poster,
+           s.show_date, s.show_time, s.screen_number,
            c.name as cinema_name,
+           os.show_date as online_date, os.show_time as online_time,
            p.id as payment_id, p.payment_status, p.payment_method, p.transaction_id, p.amount as payment_amount
     FROM tickets t
     JOIN users u ON t.user_id = u.id
-    JOIN screenings s ON t.screening_id = s.id
-    JOIN movies m ON s.movie_id = m.id
-    JOIN cinemas c ON s.cinema_id = c.id
+    LEFT JOIN screenings s ON t.screening_id = s.id
+    LEFT JOIN movies m ON s.movie_id = m.id
+    LEFT JOIN cinemas c ON s.cinema_id = c.id
+    LEFT JOIN online_schedule os ON t.online_schedule_id = os.id
+    LEFT JOIN movies om ON os.movie_id = om.id
     LEFT JOIN payments p ON t.id = p.ticket_id
     WHERE 1=1
 ";
@@ -52,7 +118,8 @@ if ($status_filter) {
     $params[] = $status_filter;
 }
 if ($movie_filter) {
-    $sql .= " AND m.id = ?";
+    $sql .= " AND (m.id = ? OR om.id = ?)";
+    $params[] = $movie_filter;
     $params[] = $movie_filter;
 }
 if ($user_filter) {
@@ -76,16 +143,15 @@ $tickets = $stmt->fetchAll();
 
 // Get all movies for filter
 $movies = $pdo->query("SELECT id, title FROM movies ORDER BY title")->fetchAll();
-
-// Get all users for filter
 $users = $pdo->query("SELECT id, username FROM users ORDER BY username")->fetchAll();
 
-// Get statistics
+// Statistics
 $stats = [
     'total' => $pdo->query("SELECT COUNT(*) FROM tickets")->fetchColumn(),
     'paid' => $pdo->query("SELECT COUNT(*) FROM tickets WHERE status = 'paid'")->fetchColumn(),
     'pending' => $pdo->query("SELECT COUNT(*) FROM tickets WHERE status = 'pending'")->fetchColumn(),
     'used' => $pdo->query("SELECT COUNT(*) FROM tickets WHERE status = 'used'")->fetchColumn(),
+    'cancelled' => $pdo->query("SELECT COUNT(*) FROM tickets WHERE status = 'cancelled'")->fetchColumn(),
     'revenue' => $pdo->query("SELECT COALESCE(SUM(total_price), 0) FROM tickets WHERE status = 'paid'")->fetchColumn(),
     'pending_payments' => $pdo->query("SELECT COUNT(*) FROM payments WHERE payment_status = 'pending'")->fetchColumn()
 ];
@@ -99,6 +165,7 @@ $stats = [
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
+        /* Same styles as before */
         :root {
             --black: #0a0a0a;
             --deep-gray: #1a1a1a;
@@ -143,7 +210,6 @@ $stats = [
             z-index: -1;
         }
         
-        /* Glassmorphism Base */
         .glass {
             background: var(--glass-bg);
             backdrop-filter: blur(10px);
@@ -152,37 +218,37 @@ $stats = [
             border-radius: 12px;
         }
         
-        /* Navigation */
         .navbar {
             background: rgba(10, 10, 10, 0.95);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
+            padding: 0.8rem 0;
             position: sticky;
             top: 0;
             z-index: 1000;
         }
         
         .nav-container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 20px;
         }
         
         .logo {
             color: var(--red);
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             font-weight: 800;
             font-family: 'Montserrat', sans-serif;
             text-decoration: none;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 1.5px;
             position: relative;
             transition: all 0.3s;
+            white-space: nowrap;
         }
         
         .logo:hover {
@@ -191,28 +257,31 @@ $stats = [
         
         .logo::before {
             content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
+            margin-right: 8px;
+            font-size: 1.2rem;
             filter: drop-shadow(0 0 5px var(--red));
         }
         
         .nav-links {
             display: flex;
-            gap: 25px;
+            gap: 5px;
             align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
         }
         
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             transition: all 0.3s;
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             position: relative;
+            white-space: nowrap;
         }
         
         .nav-links a::after {
@@ -243,14 +312,12 @@ $stats = [
             width: 60%;
         }
         
-        /* Main Container */
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
-            padding: 30px;
+            padding: 30px 20px;
         }
         
-        /* Headers */
         h1, h2, h3, h4 {
             font-family: 'Montserrat', sans-serif;
             font-weight: 700;
@@ -258,7 +325,7 @@ $stats = [
         }
         
         h1 {
-            font-size: 3rem;
+            font-size: 2.8rem;
             font-weight: 800;
             background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
             -webkit-background-clip: text;
@@ -268,7 +335,6 @@ $stats = [
             text-transform: uppercase;
         }
         
-        /* Stats Grid */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -352,7 +418,6 @@ $stats = [
             box-shadow: 0 5px 15px rgba(229, 9, 20, 0.3);
         }
         
-        /* Filters Section */
         .filters-container {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
@@ -415,7 +480,6 @@ $stats = [
             margin-left: auto;
         }
         
-        /* Table Container */
         .table-container {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
@@ -459,7 +523,6 @@ $stats = [
             border-bottom: none;
         }
         
-        /* Ticket Status Badges */
         .ticket-status {
             display: inline-block;
             padding: 4px 12px;
@@ -488,7 +551,12 @@ $stats = [
             color: #888;
         }
         
-        /* Ticket Elements */
+        .status-cancelled {
+            background: rgba(255, 68, 68, 0.15);
+            border: 1px solid #ff4444;
+            color: #ff4444;
+        }
+        
         .ticket-code {
             color: var(--red);
             font-family: 'Monaco', 'Courier New', monospace;
@@ -534,14 +602,13 @@ $stats = [
             font-family: monospace;
         }
         
-        /* Status Select */
         .status-select {
             padding: 6px 10px;
             background: rgba(10, 10, 10, 0.8);
             border: 1px solid var(--red);
             border-radius: 30px;
             color: #fff;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             width: 100%;
             margin-bottom: 5px;
             cursor: pointer;
@@ -552,7 +619,6 @@ $stats = [
             color: #fff;
         }
         
-        /* Buttons */
         .btn-primary {
             background: var(--red);
             color: #fff;
@@ -619,8 +685,8 @@ $stats = [
         }
         
         .btn-small {
-            padding: 5px 12px;
-            font-size: 0.7rem;
+            padding: 5px 10px;
+            font-size: 0.65rem;
             text-decoration: none;
             border: 1px solid var(--red);
             border-radius: 30px;
@@ -628,7 +694,7 @@ $stats = [
             transition: all 0.3s;
             font-weight: 500;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             background: rgba(0, 0, 0, 0.3);
             display: inline-block;
             text-align: center;
@@ -641,7 +707,6 @@ $stats = [
             box-shadow: 0 5px 15px rgba(229, 9, 20, 0.3);
         }
         
-        /* Alerts */
         .alert {
             padding: 18px 25px;
             margin-bottom: 20px;
@@ -670,6 +735,11 @@ $stats = [
             color: var(--text-primary);
         }
         
+        .alert-warning {
+            border-left-color: #ffaa00;
+            color: var(--text-primary);
+        }
+        
         @keyframes slideIn {
             from {
                 transform: translateY(-20px);
@@ -681,7 +751,6 @@ $stats = [
             }
         }
         
-        /* Cinema Strip Divider */
         .cinema-strip {
             height: 2px;
             background: linear-gradient(90deg, transparent, var(--red), transparent);
@@ -689,12 +758,12 @@ $stats = [
             opacity: 0.5;
         }
         
-        /* Summary Stats */
         .summary-bar {
             display: flex;
             gap: 20px;
             justify-content: flex-end;
             margin-top: 30px;
+            flex-wrap: wrap;
         }
         
         .summary-item {
@@ -728,8 +797,18 @@ $stats = [
             color: #44ff44;
         }
         
-        /* Responsive */
+        @media (max-width: 1200px) {
+            .nav-links a {
+                padding: 5px 8px;
+                font-size: 0.7rem;
+            }
+        }
+        
         @media (max-width: 1024px) {
+            .nav-container {
+                padding: 0 15px;
+            }
+            
             .table-container {
                 overflow-x: auto;
             }
@@ -740,6 +819,15 @@ $stats = [
         }
         
         @media (max-width: 768px) {
+            .nav-container {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .nav-links {
+                justify-content: center;
+            }
+            
             .filters-form {
                 flex-direction: column;
             }
@@ -747,10 +835,6 @@ $stats = [
             .filter-actions {
                 margin-left: 0;
                 width: 100%;
-            }
-            
-            .nav-links {
-                display: none;
             }
             
             h1 {
@@ -777,11 +861,12 @@ $stats = [
                 <a href="movies.php">Movies</a>
                 <a href="cinemas.php">Cinemas</a>
                 <a href="screenings.php">Screenings</a>
-                <a href="online_schedule.php">Schedule</a>
+                <a href="online_schedule.php">Online</a>
                 <a href="users.php">Users</a>
                 <a href="tickets.php" class="active">Tickets</a>
                 <a href="payments.php">Payments</a>
                 <a href="reports.php">Reports</a>
+                <a href="profile.php">Profile</a>
                 <a href="../auth/logout.php">Logout</a>
             </div>
         </div>
@@ -792,10 +877,8 @@ $stats = [
             <h1>Ticket Management</h1>
         </div>
         
-        <!-- Cinema Strip Divider -->
         <div class="cinema-strip"></div>
         
-        <!-- Stats -->
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-value"><?php echo $stats['total']; ?></div>
@@ -814,7 +897,11 @@ $stats = [
                 <div class="stat-label">Used</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value" style="color: #44ff44;">$<?php echo number_format($stats['revenue'], 2); ?></div>
+                <div class="stat-value" style="color: #ff4444;"><?php echo $stats['cancelled']; ?></div>
+                <div class="stat-label">Cancelled</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" style="color: #44ff44;">₱<?php echo number_format($stats['revenue'], 2); ?></div>
                 <div class="stat-label">Revenue</div>
             </div>
             <div class="stat-card">
@@ -826,7 +913,6 @@ $stats = [
             </div>
         </div>
         
-        <!-- Filters -->
         <div class="filters-container">
             <form method="GET" class="filters-form">
                 <div class="filter-group">
@@ -836,6 +922,7 @@ $stats = [
                         <option value="pending" <?php echo $status_filter == 'pending' ? 'selected' : ''; ?>>Pending</option>
                         <option value="paid" <?php echo $status_filter == 'paid' ? 'selected' : ''; ?>>Paid</option>
                         <option value="used" <?php echo $status_filter == 'used' ? 'selected' : ''; ?>>Used</option>
+                        <option value="cancelled" <?php echo $status_filter == 'cancelled' ? 'selected' : ''; ?>>Cancelled</option>
                     </select>
                 </div>
                 
@@ -880,7 +967,6 @@ $stats = [
             </form>
         </div>
         
-        <!-- Tickets Table -->
         <?php if (empty($tickets)): ?>
             <div class="alert alert-info" style="text-align: center; padding: 60px 40px; margin-top: 30px;">
                 <p style="font-size: 1.3rem; margin-bottom: 20px; color: #fff;">No tickets found</p>
@@ -894,7 +980,7 @@ $stats = [
                             <th>Ticket Code</th>
                             <th>Customer</th>
                             <th>Movie</th>
-                            <th>Cinema</th>
+                            <th>Type</th>
                             <th>Date/Time</th>
                             <th>Seats</th>
                             <th>Qty</th>
@@ -911,21 +997,40 @@ $stats = [
                                 <td>
                                     <div class="customer-name"><?php echo htmlspecialchars($ticket['first_name'] . ' ' . $ticket['last_name']); ?></div>
                                     <div class="customer-username">@<?php echo htmlspecialchars($ticket['username']); ?></div>
-                                </td>
-                                <td><span class="movie-title"><?php echo htmlspecialchars($ticket['title']); ?></span></td>
-                                <td><?php echo htmlspecialchars($ticket['cinema_name']); ?></td>
+                                 </td>
+                                <td><span class="movie-title"><?php echo htmlspecialchars($ticket['title'] ?? 'N/A'); ?></span></td>
                                 <td>
-                                    <div><?php echo date('M d, Y', strtotime($ticket['show_date'])); ?></div>
-                                    <div class="show-time"><?php echo date('h:i A', strtotime($ticket['show_time'])); ?></div>
-                                </td>
-                                <td><span class="seat-numbers"><?php echo $ticket['seat_numbers']; ?></span></td>
+                                    <span class="ticket-status" style="background: rgba(229,9,20,0.1); border-color:var(--red); color:var(--red); padding:3px 10px; border-radius:20px; font-size:0.7rem;">
+                                        <?php echo ucfirst($ticket['ticket_type']); ?>
+                                    </span>
+                                 </td>
+                                <td>
+                                    <?php if ($ticket['ticket_type'] == 'cinema'): ?>
+                                        <div><?php echo date('M d, Y', strtotime($ticket['show_date'] ?? '')); ?></div>
+                                        <div class="show-time"><?php echo date('h:i A', strtotime($ticket['show_time'] ?? '')); ?></div>
+                                        <div><?php echo htmlspecialchars($ticket['cinema_name'] ?? ''); ?></div>
+                                    <?php else: ?>
+                                        <div><?php echo date('M d, Y', strtotime($ticket['online_date'] ?? '')); ?></div>
+                                        <div class="show-time"><?php echo date('h:i A', strtotime($ticket['online_time'] ?? '')); ?></div>
+                                        <div>Online Streaming</div>
+                                    <?php endif; ?>
+                                 </td>
+                                <td>
+                                    <?php 
+                                    if ($ticket['seat_numbers'] == 'N/A') {
+                                        echo '<span style="color:#888;">— Online —</span>';
+                                    } else {
+                                        echo '<span class="seat-numbers">' . ($ticket['seat_numbers'] ?: 'N/A') . '</span>';
+                                    }
+                                    ?>
+                                 </td>
                                 <td><?php echo $ticket['quantity']; ?></td>
-                                <td><span class="amount">$<?php echo number_format($ticket['total_price'], 2); ?></span></td>
+                                <td><span class="amount">₱<?php echo number_format($ticket['total_price'], 2); ?></span></td>
                                 <td>
                                     <span class="ticket-status status-<?php echo $ticket['status']; ?>">
                                         <?php echo strtoupper($ticket['status']); ?>
                                     </span>
-                                </td>
+                                 </td>
                                 <td>
                                     <?php if ($ticket['payment_id']): ?>
                                         <span class="ticket-status status-<?php echo $ticket['payment_status']; ?>" style="font-size: 0.7rem;">
@@ -935,28 +1040,27 @@ $stats = [
                                     <?php else: ?>
                                         <span style="color: #888;">No payment</span>
                                     <?php endif; ?>
-                                </td>
+                                 </td>
                                 <td>
                                     <select onchange="updateStatus(<?php echo $ticket['id']; ?>, this.value)" class="status-select">
                                         <option value="">Change Status</option>
-                                        <option value="pending">Pending</option>
-                                        <option value="paid">Paid</option>
-                                        <option value="used">Used</option>
+                                        <option value="pending" <?php echo $ticket['status'] == 'cancelled' ? 'disabled' : ''; ?>>Pending</option>
+                                        <option value="paid" <?php echo $ticket['status'] == 'cancelled' ? 'disabled' : ''; ?>>Paid</option>
+                                        <option value="used" <?php echo $ticket['status'] == 'cancelled' ? 'disabled' : ''; ?>>Used</option>
+                                        <option value="cancelled" <?php echo $ticket['status'] == 'cancelled' ? 'disabled' : ''; ?>>Cancelled</option>
                                     </select>
                                     <?php if ($ticket['payment_id']): ?>
                                         <a href="payments.php?view=<?php echo $ticket['payment_id']; ?>" class="btn-small" style="display: block; text-align: center;">Payment</a>
                                     <?php endif; ?>
-                                </td>
+                                 </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
             </div>
             
-            <!-- Cinema Strip Divider -->
             <div class="cinema-strip"></div>
             
-            <!-- Summary -->
             <div class="summary-bar">
                 <div class="summary-item">
                     <span class="summary-label">Displaying:</span>
@@ -964,7 +1068,7 @@ $stats = [
                 </div>
                 <div class="summary-item">
                     <span class="summary-label">Total Revenue:</span>
-                    <span class="summary-value revenue">$<?php echo number_format(array_sum(array_column($tickets, 'total_price')), 2); ?></span>
+                    <span class="summary-value revenue">₱<?php echo number_format(array_sum(array_column($tickets, 'total_price')), 2); ?></span>
                 </div>
             </div>
         <?php endif; ?>
@@ -974,7 +1078,11 @@ $stats = [
     <script>
         function updateStatus(ticketId, status) {
             if (status) {
-                if (confirm('🎬 Update ticket status to ' + status + '?')) {
+                let message = '🎬 Update ticket status to ' + status + '?';
+                if (status === 'cancelled') {
+                    message = '⚠️ CANCEL TICKET\n\nThis will mark the ticket as CANCELLED.\n\nContinue?';
+                }
+                if (confirm(message)) {
                     window.location.href = 'tickets.php?update_status=' + ticketId + '&status=' + status;
                 }
             }

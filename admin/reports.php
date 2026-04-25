@@ -1,5 +1,5 @@
 <?php
-// admin/reports.php
+// admin/reports.php - UPDATED: payment icons (removed cash, added paymaya and online_banking)
 require_once '../includes/functions.php';
 requireAdmin();
 
@@ -35,27 +35,43 @@ $stmt = $pdo->prepare("
 $stmt->execute([$date_from, $date_to]);
 $payment_methods = $stmt->fetchAll();
 
-// ============ TOP MOVIES ============
-$top_movies = $pdo->prepare("
-    SELECT m.title, 
-           COUNT(t.id) as ticket_count,
-           SUM(t.total_price) as revenue
-    FROM movies m
-    JOIN screenings s ON m.id = s.movie_id
-    JOIN tickets t ON s.id = t.screening_id
+// ============ TOP MOVIES (includes online tickets) ==========
+$top_movies_sql = "
+    SELECT 
+        COALESCE(m.title, om.title) as title,
+        COUNT(t.id) as ticket_count,
+        SUM(t.total_price) as revenue
+    FROM tickets t
+    LEFT JOIN screenings s ON t.screening_id = s.id
+    LEFT JOIN movies m ON s.movie_id = m.id
+    LEFT JOIN online_schedule os ON t.online_schedule_id = os.id
+    LEFT JOIN movies om ON os.movie_id = om.id
     WHERE t.status = 'paid' AND DATE(t.purchase_date) BETWEEN ? AND ?
-    GROUP BY m.id
+    GROUP BY COALESCE(m.id, om.id)
     ORDER BY revenue DESC
     LIMIT 10
-");
-$top_movies->execute([$date_from, $date_to]);
-$top_movies = $top_movies->fetchAll();
+";
+$stmt = $pdo->prepare($top_movies_sql);
+$stmt->execute([$date_from, $date_to]);
+$top_movies = $stmt->fetchAll();
 
 // ============ USER STATISTICS ============
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE DATE(created_at) BETWEEN ? AND ?");
+$stmt->execute([$date_from, $date_to]);
+$new_users = $stmt->fetchColumn();
+
+$stmt = $pdo->prepare("SELECT COUNT(DISTINCT user_id) FROM tickets WHERE DATE(purchase_date) BETWEEN ? AND ?");
+$stmt->execute([$date_from, $date_to]);
+$active_users = $stmt->fetchColumn();
+
+$stmt = $pdo->prepare("SELECT COUNT(DISTINCT user_id) FROM payments WHERE DATE(payment_date) BETWEEN ? AND ? AND payment_status = 'completed'");
+$stmt->execute([$date_from, $date_to]);
+$paying_users = $stmt->fetchColumn();
+
 $user_stats = [
-    'new_users' => $pdo->prepare("SELECT COUNT(*) FROM users WHERE DATE(created_at) BETWEEN ? AND ?")->execute([$date_from, $date_to]) ? $pdo->query("SELECT FOUND_ROWS()")->fetchColumn() : 0,
-    'active_users' => $pdo->prepare("SELECT COUNT(DISTINCT user_id) FROM tickets WHERE DATE(purchase_date) BETWEEN ? AND ?")->execute([$date_from, $date_to]) ? $pdo->query("SELECT FOUND_ROWS()")->fetchColumn() : 0,
-    'paying_users' => $pdo->prepare("SELECT COUNT(DISTINCT user_id) FROM payments WHERE DATE(payment_date) BETWEEN ? AND ? AND payment_status = 'completed'")->execute([$date_from, $date_to]) ? $pdo->query("SELECT FOUND_ROWS()")->fetchColumn() : 0
+    'new_users' => $new_users,
+    'active_users' => $active_users,
+    'paying_users' => $paying_users
 ];
 
 // ============ SUMMARY ============
@@ -77,17 +93,17 @@ if (isset($_GET['export'])) {
     $output = fopen('php://output', 'w');
     
     if ($export_type == 'revenue') {
-        fputcsv($output, ['Date', 'Tickets Sold', 'Revenue']);
+        fputcsv($output, ['Date', 'Tickets Sold', 'Revenue (₱)']);
         foreach ($daily_revenue as $row) {
             fputcsv($output, [$row['date'], $row['ticket_count'], $row['daily_revenue']]);
         }
     } elseif ($export_type == 'payments') {
-        fputcsv($output, ['Payment Method', 'Transactions', 'Total Amount']);
+        fputcsv($output, ['Payment Method', 'Transactions', 'Total Amount (₱)']);
         foreach ($payment_methods as $row) {
             fputcsv($output, [$row['payment_method'], $row['count'], $row['total']]);
         }
     } elseif ($export_type == 'movies') {
-        fputcsv($output, ['Movie', 'Tickets Sold', 'Revenue']);
+        fputcsv($output, ['Movie', 'Tickets Sold', 'Revenue (₱)']);
         foreach ($top_movies as $row) {
             fputcsv($output, [$row['title'], $row['ticket_count'], $row['revenue']]);
         }
@@ -107,6 +123,7 @@ if (isset($_GET['export'])) {
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        /* Same styles as before - keeping for brevity */
         :root {
             --black: #0a0a0a;
             --deep-gray: #1a1a1a;
@@ -151,7 +168,6 @@ if (isset($_GET['export'])) {
             z-index: -1;
         }
         
-        /* Glassmorphism Base */
         .glass {
             background: var(--glass-bg);
             backdrop-filter: blur(10px);
@@ -160,37 +176,37 @@ if (isset($_GET['export'])) {
             border-radius: 12px;
         }
         
-        /* Navigation */
         .navbar {
             background: rgba(10, 10, 10, 0.95);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
+            padding: 0.8rem 0;
             position: sticky;
             top: 0;
             z-index: 1000;
         }
         
         .nav-container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 20px;
         }
         
         .logo {
             color: var(--red);
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             font-weight: 800;
             font-family: 'Montserrat', sans-serif;
             text-decoration: none;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 1.5px;
             position: relative;
             transition: all 0.3s;
+            white-space: nowrap;
         }
         
         .logo:hover {
@@ -199,28 +215,31 @@ if (isset($_GET['export'])) {
         
         .logo::before {
             content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
+            margin-right: 8px;
+            font-size: 1.2rem;
             filter: drop-shadow(0 0 5px var(--red));
         }
         
         .nav-links {
             display: flex;
-            gap: 25px;
+            gap: 5px;
             align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
         }
         
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             transition: all 0.3s;
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             position: relative;
+            white-space: nowrap;
         }
         
         .nav-links a::after {
@@ -251,14 +270,12 @@ if (isset($_GET['export'])) {
             width: 60%;
         }
         
-        /* Main Container */
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
-            padding: 30px;
+            padding: 30px 20px;
         }
         
-        /* Headers */
         h1, h2, h3, h4 {
             font-family: 'Montserrat', sans-serif;
             font-weight: 700;
@@ -266,7 +283,7 @@ if (isset($_GET['export'])) {
         }
         
         h1 {
-            font-size: 3rem;
+            font-size: 2.8rem;
             font-weight: 800;
             background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
             -webkit-background-clip: text;
@@ -295,7 +312,6 @@ if (isset($_GET['export'])) {
             border-radius: 3px;
         }
         
-        /* Filter Section */
         .filter-section {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
@@ -350,7 +366,6 @@ if (isset($_GET['export'])) {
             background: rgba(20, 20, 20, 0.8);
         }
         
-        /* Stats Grid */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -415,7 +430,6 @@ if (isset($_GET['export'])) {
             font-weight: 500;
         }
         
-        /* Chart Containers */
         .chart-container {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
@@ -464,7 +478,6 @@ if (isset($_GET['export'])) {
             width: 100% !important;
         }
         
-        /* Payment Method Cards */
         .payment-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -516,7 +529,6 @@ if (isset($_GET['export'])) {
             font-size: 0.85rem;
         }
         
-        /* Table Container */
         .table-container {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
@@ -570,7 +582,6 @@ if (isset($_GET['export'])) {
             font-weight: 500;
         }
         
-        /* Buttons */
         .btn-primary {
             background: var(--red);
             color: #fff;
@@ -613,8 +624,8 @@ if (isset($_GET['export'])) {
         }
         
         .btn-small {
-            padding: 5px 12px;
-            font-size: 0.7rem;
+            padding: 5px 10px;
+            font-size: 0.65rem;
             text-decoration: none;
             border: 1px solid rgba(229, 9, 20, 0.3);
             border-radius: 30px;
@@ -622,7 +633,7 @@ if (isset($_GET['export'])) {
             transition: all 0.3s;
             font-weight: 500;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             background: rgba(0, 0, 0, 0.3);
             display: inline-block;
         }
@@ -634,7 +645,6 @@ if (isset($_GET['export'])) {
             transform: translateY(-2px);
         }
         
-        /* Cinema Strip Divider */
         .cinema-strip {
             height: 2px;
             background: linear-gradient(90deg, transparent, var(--red), transparent);
@@ -642,18 +652,35 @@ if (isset($_GET['export'])) {
             opacity: 0.5;
         }
         
-        /* Responsive */
+        @media (max-width: 1200px) {
+            .nav-links a {
+                padding: 5px 8px;
+                font-size: 0.7rem;
+            }
+        }
+        
+        @media (max-width: 1024px) {
+            .nav-container {
+                padding: 0 15px;
+            }
+        }
+        
         @media (max-width: 768px) {
+            .nav-container {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .nav-links {
+                justify-content: center;
+            }
+            
             .filter-form {
                 flex-direction: column;
             }
             
             .filter-group {
                 width: 100%;
-            }
-            
-            .nav-links {
-                display: none;
             }
             
             h1 {
@@ -693,6 +720,7 @@ if (isset($_GET['export'])) {
                 <a href="tickets.php">Tickets</a>
                 <a href="payments.php">Payments</a>
                 <a href="reports.php" class="active">Reports</a>
+                <a href="profile.php">Profile</a>
                 <a href="../auth/logout.php">Logout</a>
             </div>
         </div>
@@ -701,10 +729,8 @@ if (isset($_GET['export'])) {
     <main class="container">
         <h1>Reports & Analytics</h1>
         
-        <!-- Cinema Strip Divider -->
         <div class="cinema-strip"></div>
         
-        <!-- Date Range Filter -->
         <div class="filter-section">
             <form method="GET" class="filter-form">
                 <div class="filter-group">
@@ -723,18 +749,17 @@ if (isset($_GET['export'])) {
             </form>
         </div>
         
-        <!-- Summary Cards -->
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-value"><?php echo $summary['total_tickets']; ?></div>
                 <div class="stat-label">Tickets Sold</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value revenue">$<?php echo number_format($summary['total_revenue'], 2); ?></div>
+                <div class="stat-value revenue">₱<?php echo number_format($summary['total_revenue'], 2); ?></div>
                 <div class="stat-label">Total Revenue</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value revenue">$<?php echo number_format($summary['avg_daily'], 2); ?></div>
+                <div class="stat-value revenue">₱<?php echo number_format($summary['avg_daily'], 2); ?></div>
                 <div class="stat-label">Avg Daily Revenue</div>
             </div>
             <div class="stat-card">
@@ -751,7 +776,6 @@ if (isset($_GET['export'])) {
             </div>
         </div>
         
-        <!-- Revenue Chart -->
         <div class="chart-container">
             <div class="chart-header">
                 <h2>Daily Revenue</h2>
@@ -761,7 +785,6 @@ if (isset($_GET['export'])) {
             <canvas id="revenueChart" style="width: 100%; height: 400px;"></canvas>
         </div>
         
-        <!-- Payment Methods -->
         <div class="chart-container">
             <div class="chart-header">
                 <h2>Payment Methods Breakdown</h2>
@@ -769,12 +792,12 @@ if (isset($_GET['export'])) {
             </div>
             
             <?php 
+            // UPDATED: Payment icons array - removed cash, added paymaya and online_banking
             $payment_icons = [
-                'credit_card' => '💳',
-                'paypal' => '🅿️',
                 'gcash' => '📱',
-                'bank_transfer' => '🏦',
-                'cash' => '💰'
+                'paymaya' => '💙',
+                'paypal' => '🅿️',
+                'online_banking' => '🏦',
             ];
             ?>
             
@@ -784,7 +807,7 @@ if (isset($_GET['export'])) {
                         <div class="payment-card">
                             <div class="payment-icon"><?php echo $payment_icons[$method['payment_method']] ?? '💰'; ?></div>
                             <div class="payment-name"><?php echo ucfirst(str_replace('_', ' ', $method['payment_method'])); ?></div>
-                            <div class="payment-total">$<?php echo number_format($method['total'], 2); ?></div>
+                            <div class="payment-total">₱<?php echo number_format($method['total'], 2); ?></div>
                             <div class="payment-count"><?php echo $method['count']; ?> transactions</div>
                         </div>
                     <?php endforeach; ?>
@@ -798,7 +821,6 @@ if (isset($_GET['export'])) {
             <?php endif; ?>
         </div>
         
-        <!-- Top Movies -->
         <div class="chart-container">
             <div class="chart-header">
                 <h2>Top Performing Movies</h2>
@@ -823,7 +845,7 @@ if (isset($_GET['export'])) {
                                 <tr>
                                     <td><span class="movie-title"><?php echo htmlspecialchars($movie['title']); ?></span></td>
                                     <td><?php echo $movie['ticket_count']; ?></td>
-                                    <td><span style="color: var(--red);">$<?php echo number_format($movie['revenue'], 2); ?></span></td>
+                                    <td><span style="color: var(--red);">₱<?php echo number_format($movie['revenue'], 2); ?></span></td>
                                     <td><span class="percentage"><?php echo number_format($percentage, 1); ?>%</span></td>
                                 </tr>
                             <?php endforeach; ?>
@@ -841,7 +863,6 @@ if (isset($_GET['export'])) {
     <script src="../assets/js/script.js"></script>
     <script>
         <?php if (!empty($daily_revenue)): ?>
-        // Revenue Chart
         const ctx1 = document.getElementById('revenueChart').getContext('2d');
         new Chart(ctx1, {
             type: 'line',
@@ -851,7 +872,7 @@ if (isset($_GET['export'])) {
                     echo "'" . implode("','", array_reverse($dates)) . "'";
                 ?>],
                 datasets: [{
-                    label: 'Revenue ($)',
+                    label: 'Revenue (₱)',
                     data: [<?php 
                         $revenues = array_column($daily_revenue, 'daily_revenue');
                         echo implode(',', array_reverse($revenues));
@@ -879,7 +900,7 @@ if (isset($_GET['export'])) {
                         grid: { color: 'rgba(255, 255, 255, 0.1)' },
                         ticks: { 
                             color: '#b3b3b3',
-                            callback: function(value) { return '$' + value; }
+                            callback: function(value) { return '₱' + value; }
                         }
                     },
                     x: {
@@ -892,7 +913,6 @@ if (isset($_GET['export'])) {
         <?php endif; ?>
         
         <?php if (!empty($payment_methods)): ?>
-        // Payment Methods Chart
         const ctx2 = document.getElementById('paymentChart').getContext('2d');
         new Chart(ctx2, {
             type: 'doughnut',
@@ -912,8 +932,7 @@ if (isset($_GET['export'])) {
                         '#e50914',
                         '#ff4444',
                         '#b2070f',
-                        '#ff6b6b',
-                        '#8b0000'
+                        '#ff6b6b'
                     ],
                     borderWidth: 0,
                     hoverOffset: 10

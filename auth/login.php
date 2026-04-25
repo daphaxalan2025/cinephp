@@ -29,7 +29,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 header('Location: ../admin/dashboard.php');
             } elseif ($user['account_type'] == 'staff') {
                 header('Location: ../staff/dashboard.php');
+            } elseif ($user['account_type'] == 'adult') {
+                // Adults go to profile selection first
+                header('Location: ../user/select_profile.php');
             } else {
+                // Kids and teens go directly to movies
                 header('Location: ../user/movies.php');
             }
             exit;
@@ -572,6 +576,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <i>🌟</i> Best Experience
                 </div>
             </div>
+        </div>
     </div>
     
     <script src="../assets/js/script.js"></script>

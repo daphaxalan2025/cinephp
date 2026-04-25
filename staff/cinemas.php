@@ -1,5 +1,5 @@
 <?php
-// staff/cinemas.php
+// staff/cinemas.php - FIXED: Uses staff_cinemas table instead of users.cinema_id
 require_once '../includes/functions.php';
 requireStaff();
 
@@ -7,94 +7,211 @@ $pdo = getDB();
 $user = getCurrentUser();
 $errors = [];
 
-// Check if staff has cinema assignment
-$cinema_filter = "";
-if ($user['cinema_id']) {
-    $cinema_filter = "WHERE id = " . $user['cinema_id'];
-}
+// Get staff's assigned cinema from staff_cinemas table
+$staff_cinema = getStaffCinema($user['id']);
+$assigned_cinema_id = $staff_cinema ? $staff_cinema['id'] : 0;
+$is_assigned = ($assigned_cinema_id > 0);
 
-// Handle Delete
+// ============ AUTO-EXPIRE OLD CINEMAS AND SCREENINGS ============
+$stmt = $pdo->prepare("UPDATE screenings SET status = 'expired' WHERE show_date < CURDATE() AND status != 'expired'");
+$stmt->execute();
+
+// ============ HANDLE DELETE ============
 if (isset($_GET['delete'])) {
     $id = $_GET['delete'];
     
-    // Check if cinema has screenings
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM screenings WHERE cinema_id = ?");
-    $stmt->execute([$id]);
-    $count = $stmt->fetchColumn();
-    
-    if ($count > 0) {
-        setFlash('Cannot delete cinema with existing screenings', 'error');
+    // For staff, verify they own this cinema
+    if ($is_assigned && $assigned_cinema_id != $id) {
+        setFlash('You can only delete your assigned cinema', 'error');
     } else {
-        $stmt = $pdo->prepare("DELETE FROM cinemas WHERE id = ?");
-        if ($stmt->execute([$id])) {
-            setFlash('Cinema deleted successfully', 'success');
+        try {
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM screenings WHERE cinema_id = ? AND show_date >= CURDATE() AND status != 'expired'");
+            $stmt->execute([$id]);
+            $count = $stmt->fetchColumn();
+            
+            if ($count > 0) {
+                setFlash('Cannot delete cinema with upcoming screenings. Delete the screenings first.', 'error');
+            } else {
+                $stmt = $pdo->prepare("DELETE FROM cinemas WHERE id = ?");
+                if ($stmt->execute([$id])) {
+                    setFlash('Cinema deleted successfully', 'success');
+                }
+            }
+        } catch (PDOException $e) {
+            setFlash('Error: ' . $e->getMessage(), 'error');
         }
     }
     header('Location: cinemas.php');
     exit;
 }
 
-// Handle Add/Edit
+// ============ HANDLE ADD/EDIT ============
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $name = trim($_POST['name'] ?? '');
     $location = trim($_POST['location'] ?? '');
     $total_screens = intval($_POST['total_screens'] ?? 1);
+    $seats_per_screen = intval($_POST['seats_per_screen'] ?? 40);
     $cinema_id = $_POST['cinema_id'] ?? '';
     
-    // Validation
-    if (empty($name)) $errors[] = 'Cinema name is required';
-    if (strlen($name) < 3) $errors[] = 'Cinema name must be at least 3 characters';
-    if (empty($location)) $errors[] = 'Location is required';
-    if ($total_screens < 1 || $total_screens > 20) $errors[] = 'Total screens must be between 1 and 20';
+    if (empty($name)) {
+        $errors[] = 'Cinema name is required';
+    } elseif (strlen($name) < 3) {
+        $errors[] = 'Cinema name must be at least 3 characters';
+    }
     
-    // Check for duplicate name
+    if (empty($location)) {
+        $errors[] = 'Location is required';
+    }
+    
+    if ($total_screens < 1) {
+        $errors[] = 'Total screens must be at least 1';
+    } elseif ($total_screens > 20) {
+        $errors[] = 'Total screens cannot exceed 20';
+    }
+    
+    if ($seats_per_screen < 10) {
+        $errors[] = 'Seats per screen must be at least 10';
+    } elseif ($seats_per_screen > 500) {
+        $errors[] = 'Seats per screen cannot exceed 500';
+    }
+    
     if (empty($errors)) {
-        $check = $pdo->prepare("SELECT id FROM cinemas WHERE name = ? AND id != ?");
-        $check->execute([$name, $cinema_id ?: 0]);
-        if ($check->fetch()) {
-            $errors[] = 'Cinema with this name already exists';
+        try {
+            $check = $pdo->prepare("SELECT id FROM cinemas WHERE name = ? AND id != ?");
+            $check->execute([$name, $cinema_id ?: 0]);
+            if ($check->fetch()) {
+                $errors[] = 'Cinema with this name already exists';
+            }
+        } catch (PDOException $e) {
+            $errors[] = 'Database error: ' . $e->getMessage();
         }
     }
     
     if (empty($errors)) {
         try {
             if ($cinema_id) {
-                // Update
-                $stmt = $pdo->prepare("UPDATE cinemas SET name=?, location=?, total_screens=? WHERE id=?");
-                $stmt->execute([$name, $location, $total_screens, $cinema_id]);
-                setFlash('Cinema updated successfully', 'success');
+                // Check if staff can edit this cinema
+                if ($is_assigned && $assigned_cinema_id != $cinema_id) {
+                    setFlash('You can only edit your assigned cinema', 'error');
+                } else {
+                    $sql = "UPDATE cinemas SET name = ?, location = ?, total_screens = ?, seats_per_screen = ? WHERE id = ?";
+                    $stmt = $pdo->prepare($sql);
+                    $result = $stmt->execute([$name, $location, $total_screens, $seats_per_screen, $cinema_id]);
+                    
+                    if ($result) {
+                        setFlash('Cinema updated successfully', 'success');
+                        header('Location: cinemas.php');
+                        exit;
+                    } else {
+                        $errors[] = 'Failed to update cinema';
+                    }
+                }
             } else {
-                // Insert
-                $stmt = $pdo->prepare("INSERT INTO cinemas (name, location, total_screens) VALUES (?, ?, ?)");
-                $stmt->execute([$name, $location, $total_screens]);
-                setFlash('Cinema added successfully', 'success');
+                // Staff can only add if not assigned to a cinema
+                if ($is_assigned) {
+                    setFlash('You cannot add new cinemas. You are already assigned to a cinema.', 'error');
+                } else {
+                    $sql = "INSERT INTO cinemas (name, location, total_screens, seats_per_screen) VALUES (?, ?, ?, ?)";
+                    $stmt = $pdo->prepare($sql);
+                    $result = $stmt->execute([$name, $location, $total_screens, $seats_per_screen]);
+                    
+                    if ($result) {
+                        setFlash('Cinema added successfully', 'success');
+                        header('Location: cinemas.php');
+                        exit;
+                    } else {
+                        $errors[] = 'Failed to add cinema';
+                    }
+                }
             }
         } catch (PDOException $e) {
-            setFlash('Error: ' . $e->getMessage(), 'error');
+            $errors[] = 'Database error: ' . $e->getMessage();
         }
+    }
+}
+
+// ============ GET FILTER PARAMETERS ============
+$filter_status = $_GET['status'] ?? 'all';
+$filter_search = trim($_GET['search'] ?? '');
+
+// ============ GET ALL CINEMAS WITH FILTER ============
+try {
+    $sql = "
+        SELECT c.*,
+               (SELECT COUNT(*) FROM screenings WHERE cinema_id = c.id AND status != 'expired' AND show_date >= CURDATE()) as total_screenings,
+               (SELECT COUNT(*) FROM screenings WHERE cinema_id = c.id AND show_date >= CURDATE() AND status != 'expired') as upcoming_screenings,
+               (SELECT COUNT(*) FROM screenings WHERE cinema_id = c.id AND status = 'expired') as expired_screenings
+        FROM cinemas c
+    ";
+    
+    $where = [];
+    $params = [];
+    
+    // Staff assigned to specific cinema
+    if ($is_assigned) {
+        $where[] = "c.id = ?";
+        $params[] = $assigned_cinema_id;
+    }
+    
+    if ($filter_search) {
+        $where[] = "(c.name LIKE ? OR c.location LIKE ?)";
+        $params[] = "%$filter_search%";
+        $params[] = "%$filter_search%";
+    }
+    
+    if ($filter_status === 'has_upcoming') {
+        $where[] = "EXISTS (SELECT 1 FROM screenings WHERE cinema_id = c.id AND show_date >= CURDATE() AND status != 'expired')";
+    } elseif ($filter_status === 'no_upcoming') {
+        $where[] = "NOT EXISTS (SELECT 1 FROM screenings WHERE cinema_id = c.id AND show_date >= CURDATE() AND status != 'expired')";
+    } elseif ($filter_status === 'has_expired') {
+        $where[] = "EXISTS (SELECT 1 FROM screenings WHERE cinema_id = c.id AND status = 'expired')";
+    }
+    
+    if (!empty($where)) {
+        $sql .= " WHERE " . implode(" AND ", $where);
+    }
+    
+    $sql .= " ORDER BY c.created_at DESC";
+    
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $cinemas = $stmt->fetchAll();
+} catch (PDOException $e) {
+    $cinemas = [];
+    setFlash('Error loading cinemas: ' . $e->getMessage(), 'error');
+}
+
+// ============ GET CINEMA FOR EDITING ============
+$edit_cinema = null;
+if (isset($_GET['edit'])) {
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM cinemas WHERE id = ?");
+        $stmt->execute([$_GET['edit']]);
+        $edit_cinema = $stmt->fetch();
+        
+        if (!$edit_cinema) {
+            setFlash('Cinema not found', 'error');
+            header('Location: cinemas.php');
+            exit;
+        }
+        
+        // Check if staff can edit this cinema
+        if ($is_assigned && $assigned_cinema_id != $edit_cinema['id']) {
+            setFlash('You can only edit your assigned cinema', 'error');
+            header('Location: cinemas.php');
+            exit;
+        }
+    } catch (PDOException $e) {
+        setFlash('Error: ' . $e->getMessage(), 'error');
         header('Location: cinemas.php');
         exit;
     }
 }
 
-// Get all cinemas with stats
-$stmt = $pdo->query("
-    SELECT c.*,
-           (SELECT COUNT(*) FROM screenings WHERE cinema_id = c.id) as total_screenings,
-           (SELECT COUNT(*) FROM screenings WHERE cinema_id = c.id AND show_date >= CURDATE()) as upcoming_screenings,
-           (SELECT COUNT(DISTINCT movie_id) FROM screenings WHERE cinema_id = c.id) as movies_showing
-    FROM cinemas c
-    $cinema_filter
-    ORDER BY c.name
-");
-$cinemas = $stmt->fetchAll();
-
-// Get cinema for editing
-$edit_cinema = null;
-if (isset($_GET['edit'])) {
-    $stmt = $pdo->prepare("SELECT * FROM cinemas WHERE id = ?");
-    $stmt->execute([$_GET['edit']]);
-    $edit_cinema = $stmt->fetch();
+// Calculate total seats across all cinemas (for staff's view)
+$total_seats = 0;
+foreach ($cinemas as $cinema) {
+    $total_seats += ($cinema['total_screens'] * ($cinema['seats_per_screen'] ?? 40));
 }
 ?>
 <!DOCTYPE html>
@@ -102,7 +219,7 @@ if (isset($_GET['edit'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Cinemas - Staff</title>
+    <title>Manage Cinemas - Staff Panel</title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -150,37 +267,37 @@ if (isset($_GET['edit'])) {
             z-index: -1;
         }
         
-        /* Navigation */
         .navbar {
             background: rgba(10, 10, 10, 0.95);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
+            padding: 0.8rem 0;
             position: sticky;
             top: 0;
             z-index: 1000;
         }
         
         .nav-container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 20px;
         }
         
         .logo {
             color: var(--red);
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             font-weight: 800;
             font-family: 'Montserrat', sans-serif;
             text-decoration: none;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 1.5px;
             position: relative;
             transition: all 0.3s;
+            white-space: nowrap;
         }
         
         .logo:hover {
@@ -189,28 +306,31 @@ if (isset($_GET['edit'])) {
         
         .logo::before {
             content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
+            margin-right: 8px;
+            font-size: 1.2rem;
             filter: drop-shadow(0 0 5px var(--red));
         }
         
         .nav-links {
             display: flex;
-            gap: 25px;
+            gap: 5px;
             align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
         }
         
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             transition: all 0.3s;
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             position: relative;
+            white-space: nowrap;
         }
         
         .nav-links a::after {
@@ -241,26 +361,23 @@ if (isset($_GET['edit'])) {
             width: 60%;
         }
         
-        /* Main Container */
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
-            padding: 30px;
+            padding: 30px 20px;
         }
         
         h1 {
-            font-size: 2.5rem;
+            font-size: 2.8rem;
             font-weight: 800;
             background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            margin: 0 0 30px 0;
+            margin: 0;
             text-transform: uppercase;
-            letter-spacing: 2px;
         }
         
-        /* Staff Notice */
         .staff-notice {
             background: rgba(229, 9, 20, 0.1);
             border: 1px solid var(--red);
@@ -271,7 +388,62 @@ if (isset($_GET['edit'])) {
             border-left: 4px solid var(--red);
         }
         
-        /* Cinemas Grid */
+        .filter-bar {
+            background: var(--card-gradient);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 24px;
+            padding: 20px 30px;
+            margin: 30px 0;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .filter-group {
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .filter-group label {
+            color: var(--red);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.7rem;
+            letter-spacing: 1.5px;
+            margin-bottom: 5px;
+            display: block;
+        }
+        
+        .filter-group select,
+        .filter-group input {
+            width: 100%;
+            padding: 10px 15px;
+            background: rgba(10, 10, 10, 0.6);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 40px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            transition: all 0.3s;
+        }
+        
+        .filter-group select:focus,
+        .filter-group input:focus {
+            outline: none;
+            border-color: var(--red);
+            box-shadow: 0 0 30px rgba(229, 9, 20, 0.2);
+        }
+        
+        .filter-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
         .cinemas-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
@@ -284,9 +456,9 @@ if (isset($_GET['edit'])) {
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.1);
-            border-radius: 24px;
+            border-radius: 16px;
             padding: 25px;
-            transition: all 0.3s;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             position: relative;
             overflow: hidden;
         }
@@ -326,12 +498,13 @@ if (isset($_GET['edit'])) {
         
         .cinema-name {
             color: var(--red);
-            font-size: 1.3rem;
+            font-size: 1.4rem;
             font-weight: 700;
             font-family: 'Montserrat', sans-serif;
+            letter-spacing: 1px;
         }
         
-        .screens-badge {
+        .cinema-badge {
             background: rgba(229, 9, 20, 0.15);
             border: 1px solid var(--red);
             border-radius: 30px;
@@ -343,20 +516,16 @@ if (isset($_GET['edit'])) {
         
         .cinema-location {
             color: var(--text-secondary);
-            margin-bottom: 15px;
-            font-size: 0.9rem;
+            margin-bottom: 20px;
+            font-size: 0.95rem;
             display: flex;
             align-items: center;
             gap: 8px;
         }
         
-        .cinema-location i {
-            color: var(--red);
-        }
-        
         .cinema-stats {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 10px;
             margin: 20px 0;
             padding: 15px 0;
@@ -366,6 +535,18 @@ if (isset($_GET['edit'])) {
         
         .stat-item {
             text-align: center;
+            position: relative;
+        }
+        
+        .stat-item:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            height: 30px;
+            width: 1px;
+            background: rgba(229, 9, 20, 0.2);
         }
         
         .stat-value {
@@ -373,6 +554,7 @@ if (isset($_GET['edit'])) {
             color: var(--red);
             font-weight: 700;
             font-family: 'Montserrat', sans-serif;
+            line-height: 1.2;
         }
         
         .stat-label {
@@ -396,9 +578,11 @@ if (isset($_GET['edit'])) {
             border-radius: 40px;
             color: var(--text-primary);
             text-decoration: none;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             transition: all 0.3s;
-            background: transparent;
+            background: rgba(0, 0, 0, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 1px;
             font-weight: 500;
         }
         
@@ -410,16 +594,16 @@ if (isset($_GET['edit'])) {
         }
         
         .btn-small.delete {
-            border-color: #ff4444;
+            border-color: rgba(255, 68, 68, 0.3);
             color: #ff4444;
         }
         
         .btn-small.delete:hover {
-            background: #ff4444;
-            color: #fff;
+            border-color: #ff4444;
+            background: rgba(255, 68, 68, 0.1);
+            color: #ff4444;
         }
         
-        /* Form Container */
         .form-container {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
@@ -427,64 +611,77 @@ if (isset($_GET['edit'])) {
             border: 1px solid rgba(229, 9, 20, 0.2);
             border-radius: 24px;
             padding: 40px;
+            margin-top: 30px;
             margin-bottom: 40px;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .form-container::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
-            animation: slideBorder 3s infinite;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
         }
         
         .form-container h2 {
-            color: var(--red);
-            font-size: 2rem;
-            margin-bottom: 25px;
+            color: #fff;
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: 30px;
+            letter-spacing: 2px;
+            position: relative;
+            padding-bottom: 20px;
+        }
+        
+        .form-container h2::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 80px;
+            height: 3px;
+            background: var(--red);
+            border-radius: 3px;
         }
         
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 25px;
         }
         
         .form-group label {
             color: var(--red);
-            display: block;
-            margin-bottom: 8px;
             font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 1.5px;
             font-size: 0.8rem;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            display: block;
         }
         
         .form-group input {
             width: 100%;
-            padding: 14px 18px;
-            background: rgba(0, 0, 0, 0.3);
+            padding: 15px 20px;
+            background: rgba(10, 10, 10, 0.6);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
             border: 1px solid rgba(229, 9, 20, 0.2);
-            color: var(--text-primary);
             border-radius: 40px;
+            color: var(--text-primary);
+            font-size: 1rem;
             transition: all 0.3s;
             font-family: 'Inter', sans-serif;
         }
         
         .form-group input:focus {
-            border-color: var(--red);
             outline: none;
-            box-shadow: 0 0 20px rgba(229, 9, 20, 0.2);
+            border-color: var(--red);
+            box-shadow: 0 0 30px rgba(229, 9, 20, 0.2);
+            background: rgba(20, 20, 20, 0.8);
+        }
+        
+        .form-group input:read-only {
+            background: rgba(10, 10, 10, 0.3);
+            cursor: not-allowed;
         }
         
         .form-text {
             display: block;
-            color: var(--text-secondary);
             font-size: 0.75rem;
-            margin-top: 5px;
+            color: var(--text-secondary);
+            margin-top: 8px;
             padding-left: 15px;
         }
         
@@ -494,10 +691,10 @@ if (isset($_GET['edit'])) {
             border: none;
             font-family: 'Montserrat', sans-serif;
             font-weight: 600;
-            letter-spacing: 1px;
+            letter-spacing: 1.5px;
             text-transform: uppercase;
             font-size: 0.9rem;
-            padding: 14px 30px;
+            padding: 14px 32px;
             border-radius: 40px;
             transition: all 0.3s;
             box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
@@ -537,9 +734,9 @@ if (isset($_GET['edit'])) {
             letter-spacing: 1px;
             text-transform: uppercase;
             font-size: 0.9rem;
-            padding: 14px 30px;
+            padding: 14px 32px;
             border-radius: 40px;
-            background: transparent;
+            background: rgba(0, 0, 0, 0.3);
             transition: all 0.3s;
             text-decoration: none;
             display: inline-block;
@@ -548,15 +745,16 @@ if (isset($_GET['edit'])) {
         .btn:hover {
             border-color: var(--red);
             color: var(--red);
+            background: rgba(229, 9, 20, 0.1);
             transform: translateY(-2px);
         }
         
-        /* Alerts */
         .alert {
             padding: 18px 25px;
             margin-bottom: 20px;
             border-radius: 40px;
             animation: slideIn 0.3s ease;
+            font-weight: 400;
             background: rgba(10, 10, 10, 0.8);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
@@ -564,13 +762,13 @@ if (isset($_GET['edit'])) {
         }
         
         .alert-error {
-            border-left: 4px solid #ff4444;
+            border-left-color: var(--red);
             color: #ff6b6b;
         }
         
         .alert-success {
-            border-left: 4px solid #44ff44;
-            color: #44ff44;
+            border-left-color: var(--red);
+            color: var(--text-primary);
         }
         
         @keyframes slideIn {
@@ -584,59 +782,64 @@ if (isset($_GET['edit'])) {
             }
         }
         
-        /* Empty State */
-        .empty-state {
-            text-align: center;
-            padding: 80px 40px;
-            background: var(--card-gradient);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.2);
-            border-radius: 32px;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .empty-state::before {
-            content: '🎬';
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            font-size: 6rem;
-            opacity: 0.03;
-            pointer-events: none;
-        }
-        
-        .empty-state p {
-            color: var(--text-secondary);
-        }
-        
-        /* Cinema Strip Divider */
         .cinema-strip {
             height: 2px;
             background: linear-gradient(90deg, transparent, var(--red), transparent);
-            margin: 20px 0 30px;
-            opacity: 0.3;
+            margin: 30px 0;
+            opacity: 0.5;
         }
         
-        /* Responsive */
+        .stats-bar {
+            display: flex;
+            gap: 20px;
+            justify-content: flex-end;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .stat-summary {
+            background: rgba(20, 20, 20, 0.6);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            border: 1px solid rgba(229, 9, 20, 0.2);
+            border-radius: 40px;
+            padding: 12px 25px;
+            transition: all 0.3s;
+        }
+        
+        .stat-summary:hover {
+            border-color: var(--red);
+            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.15);
+        }
+        
+        .stat-summary span {
+            color: var(--text-secondary);
+            font-weight: 400;
+            margin-right: 10px;
+        }
+        
+        .stat-summary strong {
+            color: var(--red);
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+        
         @media (max-width: 768px) {
-            .nav-links {
-                display: none;
+            .nav-container {
+                flex-direction: column;
+                gap: 10px;
             }
-            
+            .nav-links {
+                justify-content: center;
+            }
             h1 {
                 font-size: 2rem;
             }
-            
-            .cinema-header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 10px;
+            .cinemas-grid {
+                grid-template-columns: 1fr;
             }
-            
-            .cinema-actions {
-                flex-direction: column;
+            .cinema-stats {
+                grid-template-columns: repeat(2, 1fr);
             }
         }
     </style>
@@ -659,12 +862,16 @@ if (isset($_GET['edit'])) {
     </nav>
     
     <main class="container">
-        <h1>Manage Cinemas</h1>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+            <h1>Manage Cinemas</h1>
+            <?php if (!$is_assigned): ?>
+                <a href="?action=add" class="btn-primary">+ Add Cinema</a>
+            <?php endif; ?>
+        </div>
         
-        <!-- Cinema Strip Divider -->
         <div class="cinema-strip"></div>
         
-        <?php if ($user['cinema_id']): ?>
+        <?php if ($is_assigned): ?>
             <div class="staff-notice">
                 ℹ️ You are assigned to a specific cinema. You can only view and manage that cinema.
             </div>
@@ -677,6 +884,12 @@ if (isset($_GET['edit'])) {
                         <li><?php echo htmlspecialchars($error); ?></li>
                     <?php endforeach; ?>
                 </ul>
+            </div>
+        <?php endif; ?>
+        
+        <?php $flash = getFlash(); if ($flash): ?>
+            <div class="alert alert-<?php echo $flash['type']; ?>">
+                <?php echo $flash['message']; ?>
             </div>
         <?php endif; ?>
         
@@ -714,7 +927,18 @@ if (isset($_GET['edit'])) {
                         <small class="form-text">Number of cinema screens/halls (1-20)</small>
                     </div>
                     
-                    <div style="display: flex; gap: 10px;">
+                    <div class="form-group">
+                        <label>Seats Per Screen</label>
+                        <input type="number" name="seats_per_screen" 
+                               value="<?php echo $edit_cinema['seats_per_screen'] ?? '40'; ?>" 
+                               min="10" max="500" required>
+                        <small class="form-text">
+                            This is the fixed number of seats in each screen. 
+                            Cannot be changed once screenings are active.
+                        </small>
+                    </div>
+                    
+                    <div style="display: flex; gap: 15px; margin-top: 40px;">
                         <button type="submit" class="btn-primary">
                             <?php echo $edit_cinema ? 'Update Cinema' : 'Add Cinema'; ?>
                         </button>
@@ -722,15 +946,44 @@ if (isset($_GET['edit'])) {
                     </div>
                 </form>
             </div>
+            
+            <div class="cinema-strip"></div>
         <?php endif; ?>
+        
+        <!-- Filter Bar -->
+        <div class="filter-bar">
+            <form method="GET" style="display: flex; gap: 20px; flex-wrap: wrap; width: 100%; align-items: flex-end;">
+                <div class="filter-group">
+                    <label>Search</label>
+                    <input type="text" name="search" placeholder="Cinema name or location..." value="<?php echo htmlspecialchars($filter_search); ?>">
+                </div>
+                <div class="filter-group">
+                    <label>Filter by Status</label>
+                    <select name="status">
+                        <option value="all" <?php echo $filter_status == 'all' ? 'selected' : ''; ?>>All Cinemas</option>
+                        <option value="has_upcoming" <?php echo $filter_status == 'has_upcoming' ? 'selected' : ''; ?>>Has Upcoming Screenings</option>
+                        <option value="no_upcoming" <?php echo $filter_status == 'no_upcoming' ? 'selected' : ''; ?>>No Upcoming Screenings</option>
+                        <option value="has_expired" <?php echo $filter_status == 'has_expired' ? 'selected' : ''; ?>>Has Expired Screenings</option>
+                    </select>
+                </div>
+                <div class="filter-actions">
+                    <button type="submit" class="btn-primary" style="padding: 10px 25px;">Apply Filters</button>
+                    <a href="cinemas.php" class="btn" style="padding: 10px 25px;">Clear</a>
+                </div>
+            </form>
+        </div>
         
         <!-- Cinemas Grid -->
         <?php if (empty($cinemas)): ?>
-            <div class="empty-state">
-                <p style="margin-bottom: 10px;">No cinemas found.</p>
-                <?php if (!$user['cinema_id']): ?>
-                    <p style="color: var(--text-secondary);">Click "Add New Cinema" to create your first cinema.</p>
-                <?php endif; ?>
+            <div class="alert alert-info" style="text-align: center; padding: 60px 40px; margin-top: 30px;">
+                <p style="font-size: 1.3rem; margin-bottom: 20px; color: #fff;">No cinemas found</p>
+                <p style="color: var(--text-secondary); font-size: 1rem;">
+                    <?php if ($is_assigned): ?>
+                        You are assigned to a cinema that doesn't exist or has been deleted.
+                    <?php else: ?>
+                        Click the "Add Cinema" button to create your first cinema.
+                    <?php endif; ?>
+                </p>
             </div>
         <?php else: ?>
             <div class="cinemas-grid">
@@ -738,7 +991,7 @@ if (isset($_GET['edit'])) {
                     <div class="cinema-card">
                         <div class="cinema-header">
                             <span class="cinema-name"><?php echo htmlspecialchars($cinema['name']); ?></span>
-                            <span class="screens-badge">🎬 <?php echo $cinema['total_screens']; ?> Screens</span>
+                            <span class="cinema-badge"><?php echo $cinema['total_screens']; ?> Screens</span>
                         </div>
                         
                         <div class="cinema-location">
@@ -755,21 +1008,41 @@ if (isset($_GET['edit'])) {
                                 <div class="stat-label">Upcoming</div>
                             </div>
                             <div class="stat-item">
-                                <div class="stat-value"><?php echo $cinema['movies_showing'] ?? 0; ?></div>
-                                <div class="stat-label">Movies</div>
+                                <div class="stat-value"><?php echo $cinema['expired_screenings'] ?? 0; ?></div>
+                                <div class="stat-label">Expired</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value"><?php echo $cinema['seats_per_screen'] ?? 40; ?></div>
+                                <div class="stat-label">Seats/Screen</div>
                             </div>
                         </div>
                         
                         <div class="cinema-actions">
                             <a href="?edit=<?php echo $cinema['id']; ?>" class="btn-small">Edit</a>
                             <a href="screenings.php?cinema_id=<?php echo $cinema['id']; ?>" class="btn-small">Screenings</a>
-                            <?php if (!$user['cinema_id']): ?>
+                            <?php if (!$is_assigned): ?>
                                 <a href="?delete=<?php echo $cinema['id']; ?>" class="btn-small delete" 
-                                   onclick="return confirm('Delete this cinema?')">Delete</a>
+                                   onclick="return confirm('Are you sure you want to delete this cinema?\n\nWARNING: This will fail if there are upcoming screenings assigned to this cinema.')">Delete</a>
                             <?php endif; ?>
                         </div>
                     </div>
                 <?php endforeach; ?>
+            </div>
+            
+            <!-- Stats Summary -->
+            <div class="stats-bar">
+                <div class="stat-summary">
+                    <span>Total Cinemas</span>
+                    <strong><?php echo count($cinemas); ?></strong>
+                </div>
+                <div class="stat-summary">
+                    <span>Total Screens</span>
+                    <strong><?php echo array_sum(array_column($cinemas, 'total_screens')); ?></strong>
+                </div>
+                <div class="stat-summary">
+                    <span>Total Seats</span>
+                    <strong><?php echo $total_seats; ?></strong>
+                </div>
             </div>
         <?php endif; ?>
     </main>

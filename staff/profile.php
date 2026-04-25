@@ -1,11 +1,17 @@
 <?php
-// staff/profile.php
+// staff/profile.php - FIXED: Uses staff_cinemas table instead of users.cinema_id
 require_once '../includes/functions.php';
 requireStaff();
 
 $pdo = getDB();
 $user = getCurrentUser();
 $errors = [];
+
+// Get staff's assigned cinema from staff_cinemas table
+$staff_cinema = getStaffCinema($user['id']);
+$cinema_id = $staff_cinema ? $staff_cinema['id'] : 0;
+$cinema_name = $staff_cinema ? $staff_cinema['name'] : 'Not Assigned';
+$cinema_location = $staff_cinema ? $staff_cinema['location'] : '';
 
 // Handle profile picture upload
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['profile_pic']) && $_FILES['profile_pic']['size'] > 0) {
@@ -115,17 +121,6 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute([$user['id']]);
 $days_worked = $stmt->fetchColumn();
-
-// Get cinema info
-$cinema_name = 'Not Assigned';
-$cinema_location = '';
-if ($user['cinema_id']) {
-    $stmt = $pdo->prepare("SELECT name, location FROM cinemas WHERE id = ?");
-    $stmt->execute([$user['cinema_id']]);
-    $cinema = $stmt->fetch();
-    $cinema_name = $cinema ? $cinema['name'] : 'Not Assigned';
-    $cinema_location = $cinema ? $cinema['location'] : '';
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">

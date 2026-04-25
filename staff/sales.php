@@ -1,5 +1,6 @@
 <?php
-// staff/sales.php
+// staff/sales.php - COMPLETELY FIXED
+// SQL concatenation removed - using prepared statements only
 require_once '../includes/functions.php';
 requireStaff();
 
@@ -8,14 +9,133 @@ $user = getCurrentUser();
 
 // Get staff's cinema (if assigned)
 $cinema_id = $user['cinema_id'] ?? 0;
-$cinema_filter = $cinema_id ? "AND s.cinema_id = $cinema_id" : "";
 
 // Get date range
-$date_from = $_GET['from'] ?? date('Y-m-d');
+$date_from = $_GET['from'] ?? date('Y-m-d', strtotime('-30 days'));
 $date_to = $_GET['to'] ?? date('Y-m-d');
 
-// Get sales by day
-$stmt = $pdo->query("
+// ========== EXPORT HANDLING ==========
+if (isset($_GET['export'])) {
+    $export_type = $_GET['export'];
+    $filename = "staff_sales_{$export_type}_{$date_from}_to_{$date_to}.csv";
+    
+    header('Content-Type: text/csv');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    
+    $output = fopen('php://output', 'w');
+    
+    if ($export_type == 'daily') {
+        // Build query with prepared statements
+        $sql = "
+            SELECT 
+                DATE(t.purchase_date) as sale_date,
+                COUNT(*) as ticket_count,
+                SUM(t.total_price) as daily_revenue,
+                COUNT(DISTINCT t.user_id) as unique_customers
+            FROM tickets t
+            JOIN screenings s ON t.screening_id = s.id
+            WHERE t.status = 'paid' 
+              AND DATE(t.purchase_date) BETWEEN ? AND ?
+        ";
+        $params = [$date_from, $date_to];
+        
+        if ($cinema_id) {
+            $sql .= " AND s.cinema_id = ?";
+            $params[] = $cinema_id;
+        }
+        
+        $sql .= " GROUP BY DATE(t.purchase_date) ORDER BY sale_date DESC";
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $daily = $stmt->fetchAll();
+        
+        fputcsv($output, ['Date', 'Tickets Sold', 'Unique Customers', 'Revenue (₱)', 'Average per Ticket (₱)']);
+        foreach ($daily as $row) {
+            fputcsv($output, [
+                $row['sale_date'],
+                $row['ticket_count'],
+                $row['unique_customers'],
+                $row['daily_revenue'],
+                $row['ticket_count'] > 0 ? $row['daily_revenue'] / $row['ticket_count'] : 0
+            ]);
+        }
+    } 
+    elseif ($export_type == 'movies') {
+        $sql = "
+            SELECT 
+                m.title,
+                COUNT(t.id) as ticket_count,
+                SUM(t.total_price) as revenue,
+                AVG(t.total_price) as avg_ticket_price
+            FROM tickets t
+            JOIN screenings s ON t.screening_id = s.id
+            JOIN movies m ON s.movie_id = m.id
+            WHERE t.status = 'paid'
+              AND DATE(t.purchase_date) BETWEEN ? AND ?
+        ";
+        $params = [$date_from, $date_to];
+        
+        if ($cinema_id) {
+            $sql .= " AND s.cinema_id = ?";
+            $params[] = $cinema_id;
+        }
+        
+        $sql .= " GROUP BY m.id ORDER BY revenue DESC";
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $movies = $stmt->fetchAll();
+        
+        fputcsv($output, ['Movie', 'Tickets Sold', 'Revenue (₱)', 'Average Price (₱)']);
+        foreach ($movies as $row) {
+            fputcsv($output, [$row['title'], $row['ticket_count'], $row['revenue'], $row['avg_ticket_price']]);
+        }
+    }
+    elseif ($export_type == 'payments') {
+        $sql = "
+            SELECT 
+                p.payment_method,
+                COUNT(*) as transaction_count,
+                SUM(p.amount) as total_amount
+            FROM payments p
+            JOIN tickets t ON p.ticket_id = t.id
+            JOIN screenings s ON t.screening_id = s.id
+            WHERE p.payment_status = 'completed'
+              AND DATE(p.payment_date) BETWEEN ? AND ?
+        ";
+        $params = [$date_from, $date_to];
+        
+        if ($cinema_id) {
+            $sql .= " AND s.cinema_id = ?";
+            $params[] = $cinema_id;
+        }
+        
+        $sql .= " GROUP BY p.payment_method";
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $methods = $stmt->fetchAll();
+        
+        fputcsv($output, ['Payment Method', 'Transactions', 'Total Amount (₱)', 'Average per Transaction (₱)']);
+        foreach ($methods as $row) {
+            fputcsv($output, [
+                ucfirst(str_replace('_', ' ', $row['payment_method'])),
+                $row['transaction_count'],
+                $row['total_amount'],
+                $row['transaction_count'] > 0 ? $row['total_amount'] / $row['transaction_count'] : 0
+            ]);
+        }
+    }
+    
+    fclose($output);
+    exit;
+}
+
+// ========== REGULAR REPORT DISPLAY ==========
+
+// Get sales by day - USING PREPARED STATEMENTS
+$sql = "
     SELECT 
         DATE(t.purchase_date) as sale_date,
         COUNT(*) as ticket_count,
@@ -24,15 +144,23 @@ $stmt = $pdo->query("
     FROM tickets t
     JOIN screenings s ON t.screening_id = s.id
     WHERE t.status = 'paid' 
-      AND DATE(t.purchase_date) BETWEEN '$date_from' AND '$date_to'
-      $cinema_filter
-    GROUP BY DATE(t.purchase_date)
-    ORDER BY sale_date DESC
-");
+      AND DATE(t.purchase_date) BETWEEN ? AND ?
+";
+$params = [$date_from, $date_to];
+
+if ($cinema_id) {
+    $sql .= " AND s.cinema_id = ?";
+    $params[] = $cinema_id;
+}
+
+$sql .= " GROUP BY DATE(t.purchase_date) ORDER BY sale_date DESC";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
 $daily_sales = $stmt->fetchAll();
 
-// Get sales by movie
-$stmt = $pdo->query("
+// Get sales by movie - USING PREPARED STATEMENTS
+$sql = "
     SELECT 
         m.title,
         COUNT(t.id) as ticket_count,
@@ -42,15 +170,23 @@ $stmt = $pdo->query("
     JOIN screenings s ON t.screening_id = s.id
     JOIN movies m ON s.movie_id = m.id
     WHERE t.status = 'paid'
-      AND DATE(t.purchase_date) BETWEEN '$date_from' AND '$date_to'
-      $cinema_filter
-    GROUP BY m.id
-    ORDER BY revenue DESC
-");
+      AND DATE(t.purchase_date) BETWEEN ? AND ?
+";
+$params = [$date_from, $date_to];
+
+if ($cinema_id) {
+    $sql .= " AND s.cinema_id = ?";
+    $params[] = $cinema_id;
+}
+
+$sql .= " GROUP BY m.id ORDER BY revenue DESC";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
 $movie_sales = $stmt->fetchAll();
 
-// Get sales by payment method
-$stmt = $pdo->query("
+// Get sales by payment method - USING PREPARED STATEMENTS
+$sql = "
     SELECT 
         p.payment_method,
         COUNT(*) as transaction_count,
@@ -59,14 +195,23 @@ $stmt = $pdo->query("
     JOIN tickets t ON p.ticket_id = t.id
     JOIN screenings s ON t.screening_id = s.id
     WHERE p.payment_status = 'completed'
-      AND DATE(p.payment_date) BETWEEN '$date_from' AND '$date_to'
-      $cinema_filter
-    GROUP BY p.payment_method
-");
+      AND DATE(p.payment_date) BETWEEN ? AND ?
+";
+$params = [$date_from, $date_to];
+
+if ($cinema_id) {
+    $sql .= " AND s.cinema_id = ?";
+    $params[] = $cinema_id;
+}
+
+$sql .= " GROUP BY p.payment_method";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
 $payment_methods = $stmt->fetchAll();
 
-// Get hourly breakdown for today
-$stmt = $pdo->query("
+// Get hourly breakdown for today - USING PREPARED STATEMENTS
+$sql = "
     SELECT 
         HOUR(t.purchase_date) as hour,
         COUNT(*) as ticket_count,
@@ -75,10 +220,18 @@ $stmt = $pdo->query("
     JOIN screenings s ON t.screening_id = s.id
     WHERE t.status = 'paid' 
       AND DATE(t.purchase_date) = CURDATE()
-      $cinema_filter
-    GROUP BY HOUR(t.purchase_date)
-    ORDER BY hour
-");
+";
+$params = [];
+
+if ($cinema_id) {
+    $sql .= " AND s.cinema_id = ?";
+    $params[] = $cinema_id;
+}
+
+$sql .= " GROUP BY HOUR(t.purchase_date) ORDER BY hour";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
 $hourly_sales = $stmt->fetchAll();
 
 // Calculate totals
@@ -96,6 +249,7 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        /* All existing styles remain the same - keeping for brevity */
         :root {
             --black: #0a0a0a;
             --deep-gray: #1a1a1a;
@@ -109,6 +263,9 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             --glass-bg: rgba(26, 26, 26, 0.7);
             --glass-border: rgba(255, 255, 255, 0.05);
             --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
+            --success-color: #44ff44;
+            --danger-color: #ff4444;
+            --warning-color: #ffff44;
         }
         
         * {
@@ -231,14 +388,12 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             width: 60%;
         }
         
-        /* Main Container */
         .container {
             max-width: 1400px;
             margin: 0 auto;
             padding: 30px;
         }
         
-        /* Header */
         .report-header {
             display: flex;
             justify-content: space-between;
@@ -270,7 +425,6 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
         }
         
-        /* Date Filter */
         .date-filter {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
@@ -378,7 +532,6 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             left: 100%;
         }
         
-        /* Stats Grid */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -432,7 +585,6 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             letter-spacing: 1px;
         }
         
-        /* Chart Container */
         .chart-container {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
@@ -462,7 +614,6 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             font-size: 1.5rem;
         }
         
-        /* Tables */
         .section-title {
             color: var(--red);
             margin: 40px 0 20px;
@@ -527,7 +678,6 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             font-weight: 600;
         }
         
-        /* Cinema Strip Divider */
         .cinema-strip {
             height: 2px;
             background: linear-gradient(90deg, transparent, var(--red), transparent);
@@ -535,7 +685,39 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             opacity: 0.3;
         }
         
-        /* Responsive */
+        .export-btn {
+            background: transparent;
+            border: 1px solid var(--red);
+            color: var(--red);
+            padding: 6px 12px;
+            border-radius: 30px;
+            font-size: 0.75rem;
+            text-decoration: none;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: 15px;
+        }
+        
+        .export-btn:hover {
+            background: var(--red);
+            color: #fff;
+            transform: translateY(-2px);
+        }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            margin: 40px 0 20px;
+        }
+        
+        .section-header h2 {
+            margin: 0;
+        }
+        
         @media (max-width: 768px) {
             .nav-links {
                 display: none;
@@ -556,6 +738,12 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             .sales-table {
                 overflow-x: auto;
                 display: block;
+            }
+            
+            .section-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
             }
         }
     </style>
@@ -592,10 +780,8 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             <?php endif; ?>
         </div>
         
-        <!-- Cinema Strip Divider -->
         <div class="cinema-strip"></div>
         
-        <!-- Date Filter -->
         <div class="date-filter">
             <form method="GET" class="filter-form">
                 <div class="filter-group">
@@ -612,18 +798,17 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             </form>
         </div>
         
-        <!-- Summary Stats -->
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-value"><?php echo $total_tickets; ?></div>
                 <div class="stat-label">Tickets Sold</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">$<?php echo number_format($total_revenue, 2); ?></div>
+                <div class="stat-value">₱<?php echo number_format($total_revenue, 2); ?></div>
                 <div class="stat-label">Total Revenue</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">$<?php echo number_format($avg_daily, 2); ?></div>
+                <div class="stat-value">₱<?php echo number_format($avg_daily, 2); ?></div>
                 <div class="stat-label">Avg Daily Revenue</div>
             </div>
             <div class="stat-card">
@@ -632,7 +817,6 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             </div>
         </div>
         
-        <!-- Hourly Sales Chart (for today) -->
         <?php if (!empty($hourly_sales) && ($date_from == date('Y-m-d') || $date_to == date('Y-m-d'))): ?>
         <div class="chart-container">
             <h2>Hourly Sales - Today</h2>
@@ -640,8 +824,11 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
         </div>
         <?php endif; ?>
         
-        <!-- Daily Sales Table -->
-        <h2 class="section-title">Daily Breakdown</h2>
+        <!-- Daily Breakdown Section -->
+        <div class="section-header">
+            <h2 class="section-title" style="margin:0;">Daily Breakdown</h2>
+            <a href="?export=daily&from=<?php echo $date_from; ?>&to=<?php echo $date_to; ?>" class="export-btn">📥 Export CSV</a>
+        </div>
         <table class="sales-table">
             <thead>
                 <tr>
@@ -658,8 +845,8 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
                         <td><?php echo date('M d, Y', strtotime($day['sale_date'])); ?></td>
                         <td><span class="highlight-number"><?php echo $day['ticket_count']; ?></span></td>
                         <td><?php echo $day['unique_customers']; ?></td>
-                        <td><span class="highlight-number">$<?php echo number_format($day['daily_revenue'], 2); ?></span></td>
-                        <td>$<?php echo number_format($day['daily_revenue'] / $day['ticket_count'], 2); ?></td>
+                        <td><span class="highlight-number">₱<?php echo number_format($day['daily_revenue'], 2); ?></span></td>
+                        <td>₱<?php echo number_format($day['daily_revenue'] / $day['ticket_count'], 2); ?></td>
                     </tr>
                 <?php endforeach; ?>
                 <?php if (empty($daily_sales)): ?>
@@ -670,8 +857,11 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             </tbody>
         </table>
         
-        <!-- Movie Sales Table -->
-        <h2 class="section-title">Top Movies</h2>
+        <!-- Top Movies Section -->
+        <div class="section-header">
+            <h2 class="section-title" style="margin:0;">Top Movies</h2>
+            <a href="?export=movies&from=<?php echo $date_from; ?>&to=<?php echo $date_to; ?>" class="export-btn">📥 Export CSV</a>
+        </div>
         <table class="sales-table">
             <thead>
                 <tr>
@@ -686,8 +876,8 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
                     <tr>
                         <td><strong><?php echo htmlspecialchars($movie['title']); ?></strong></td>
                         <td><span class="highlight-number"><?php echo $movie['ticket_count']; ?></span></td>
-                        <td><span class="highlight-number">$<?php echo number_format($movie['revenue'], 2); ?></span></td>
-                        <td>$<?php echo number_format($movie['avg_ticket_price'], 2); ?></td>
+                        <td><span class="highlight-number">₱<?php echo number_format($movie['revenue'], 2); ?></span></td>
+                        <td>₱<?php echo number_format($movie['avg_ticket_price'], 2); ?></td>
                     </tr>
                 <?php endforeach; ?>
                 <?php if (empty($movie_sales)): ?>
@@ -698,8 +888,11 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             </tbody>
         </table>
         
-        <!-- Payment Methods -->
-        <h2 class="section-title">Payment Methods</h2>
+        <!-- Payment Methods Section -->
+        <div class="section-header">
+            <h2 class="section-title" style="margin:0;">Payment Methods</h2>
+            <a href="?export=payments&from=<?php echo $date_from; ?>&to=<?php echo $date_to; ?>" class="export-btn">📥 Export CSV</a>
+        </div>
         <table class="sales-table">
             <thead>
                 <tr>
@@ -714,8 +907,8 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
                     <tr>
                         <td><?php echo ucfirst(str_replace('_', ' ', $method['payment_method'])); ?></td>
                         <td><span class="highlight-number"><?php echo $method['transaction_count']; ?></span></td>
-                        <td><span class="highlight-number">$<?php echo number_format($method['total_amount'], 2); ?></span></td>
-                        <td>$<?php echo number_format($method['total_amount'] / $method['transaction_count'], 2); ?></td>
+                        <td><span class="highlight-number">₱<?php echo number_format($method['total_amount'], 2); ?></span></td>
+                        <td>₱<?php echo number_format($method['total_amount'] / $method['transaction_count'], 2); ?></td>
                     </tr>
                 <?php endforeach; ?>
                 <?php if (empty($payment_methods)): ?>
@@ -729,7 +922,6 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
     
     <script>
         <?php if (!empty($hourly_sales)): ?>
-        // Hourly Chart
         const hourlyCtx = document.getElementById('hourlyChart').getContext('2d');
         new Chart(hourlyCtx, {
             type: 'line',
@@ -739,7 +931,7 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
                     echo implode(',', array_map(function($h) { return "'" . $h . ":00'"; }, $hours));
                 ?>],
                 datasets: [{
-                    label: 'Revenue ($)',
+                    label: 'Revenue (₱)',
                     data: [<?php echo implode(',', array_column($hourly_sales, 'revenue')); ?>],
                     borderColor: '#e50914',
                     backgroundColor: 'rgba(229, 9, 20, 0.1)',
@@ -761,7 +953,10 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
                 scales: {
                     y: { 
                         grid: { color: 'rgba(255,255,255,0.1)' }, 
-                        ticks: { color: '#b3b3b3' } 
+                        ticks: { 
+                            color: '#b3b3b3',
+                            callback: function(value) { return '₱' + value; }
+                        } 
                     },
                     x: { 
                         grid: { color: 'rgba(255,255,255,0.1)' }, 

@@ -1,73 +1,99 @@
 <?php
-// staff/dashboard.php
+// staff/dashboard.php - UPDATED: Uses staff_cinemas table instead of users.cinema_id
 require_once '../includes/functions.php';
 requireStaff();
 
 $pdo = getDB();
 $user = getCurrentUser();
 
-// Get today's date
 $today = date('Y-m-d');
 
-// Get staff's cinema (if assigned)
-$cinema_id = $user['cinema_id'] ?? 0;
-$cinema_name = 'All Cinemas';
-if ($cinema_id) {
-    $stmt = $pdo->prepare("SELECT name FROM cinemas WHERE id = ?");
-    $stmt->execute([$cinema_id]);
-    $cinema = $stmt->fetch();
-    $cinema_name = $cinema ? $cinema['name'] : 'All Cinemas';
-}
+// Get staff's assigned cinema from staff_cinemas table
+$staff_cinema = getStaffCinema($user['id']);
+$cinema_id = $staff_cinema ? $staff_cinema['id'] : 0;
+$cinema_name = $staff_cinema ? $staff_cinema['name'] : 'All Cinemas';
 
-// Build query based on staff's cinema assignment
-$cinema_filter = $cinema_id ? "AND s.cinema_id = $cinema_id" : "";
-
-// Get today's screenings
-$stmt = $pdo->query("
+// ========== TODAY'S SCREENINGS ==========
+$sql = "
     SELECT s.*, m.title, m.poster, m.duration, c.name as cinema_name,
            (SELECT COUNT(*) FROM tickets WHERE screening_id = s.id AND status IN ('paid', 'used')) as tickets_sold
     FROM screenings s
     JOIN movies m ON s.movie_id = m.id
     JOIN cinemas c ON s.cinema_id = c.id
-    WHERE s.show_date = '$today' $cinema_filter
-    ORDER BY s.show_time
-");
+    WHERE s.show_date = ?
+";
+$params = [$today];
+
+if ($cinema_id) {
+    $sql .= " AND s.cinema_id = ?";
+    $params[] = $cinema_id;
+}
+
+$sql .= " ORDER BY s.show_time";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
 $today_screenings = $stmt->fetchAll();
 
-// Get today's statistics
-$stmt = $pdo->query("
+// ========== TODAY'S STATISTICS ==========
+$sql = "
     SELECT 
         COUNT(DISTINCT t.id) as tickets_sold,
         COALESCE(SUM(t.total_price), 0) as revenue,
         COUNT(DISTINCT s.id) as screenings_count
     FROM tickets t
     JOIN screenings s ON t.screening_id = s.id
-    WHERE s.show_date = '$today' AND t.status = 'paid'
-    $cinema_filter
-");
+    WHERE s.show_date = ? AND t.status = 'paid'
+";
+$params = [$today];
+
+if ($cinema_id) {
+    $sql .= " AND s.cinema_id = ?";
+    $params[] = $cinema_id;
+}
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
 $stats = $stmt->fetch();
 
-// Get recent verifications
-$stmt = $pdo->query("
+// ========== RECENT VERIFICATIONS ==========
+$sql = "
     SELECT t.ticket_code, t.used_at, m.title, u.first_name, u.last_name
     FROM tickets t
     JOIN screenings s ON t.screening_id = s.id
     JOIN movies m ON s.movie_id = m.id
     JOIN users u ON t.user_id = u.id
     WHERE t.used_at IS NOT NULL
-    ORDER BY t.used_at DESC
-    LIMIT 10
-");
+";
+$params = [];
+
+if ($cinema_id) {
+    $sql .= " AND s.cinema_id = ?";
+    $params[] = $cinema_id;
+}
+
+$sql .= " ORDER BY t.used_at DESC LIMIT 10";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
 $recent_verifications = $stmt->fetchAll();
 
-// Get pending verifications for today
-$stmt = $pdo->query("
+// ========== PENDING VERIFICATIONS ==========
+$sql = "
     SELECT COUNT(*) as pending
     FROM tickets t
     JOIN screenings s ON t.screening_id = s.id
-    WHERE s.show_date = '$today' AND t.status = 'paid' AND t.used_at IS NULL
-    $cinema_filter
-");
+    WHERE s.show_date = ? AND t.status = 'paid' AND t.used_at IS NULL
+";
+$params = [$today];
+
+if ($cinema_id) {
+    $sql .= " AND s.cinema_id = ?";
+    $params[] = $cinema_id;
+}
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
 $pending = $stmt->fetch();
 $pending_verifications = $pending['pending'] ?? 0;
 ?>
@@ -80,6 +106,7 @@ $pending_verifications = $pending['pending'] ?? 0;
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
+        /* Your existing styles remain exactly the same - keeping for brevity */
         :root {
             --black: #0a0a0a;
             --deep-gray: #1a1a1a;
@@ -95,11 +122,7 @@ $pending_verifications = $pending['pending'] ?? 0;
             --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
         }
         
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
             background: var(--black);
@@ -124,7 +147,6 @@ $pending_verifications = $pending['pending'] ?? 0;
             z-index: -1;
         }
         
-        /* Navigation */
         .navbar {
             background: rgba(10, 10, 10, 0.95);
             backdrop-filter: blur(10px);
@@ -157,23 +179,10 @@ $pending_verifications = $pending['pending'] ?? 0;
             transition: all 0.3s;
         }
         
-        .logo:hover {
-            text-shadow: var(--red-glow);
-        }
+        .logo:hover { text-shadow: var(--red-glow); }
+        .logo::before { content: "🎬"; margin-right: 10px; font-size: 1.5rem; filter: drop-shadow(0 0 5px var(--red)); }
         
-        .logo::before {
-            content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
-            filter: drop-shadow(0 0 5px var(--red));
-        }
-        
-        .nav-links {
-            display: flex;
-            gap: 25px;
-            align-items: center;
-        }
-        
+        .nav-links { display: flex; gap: 25px; align-items: center; }
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
@@ -186,7 +195,6 @@ $pending_verifications = $pending['pending'] ?? 0;
             letter-spacing: 1px;
             position: relative;
         }
-        
         .nav-links a::after {
             content: '';
             position: absolute;
@@ -198,31 +206,12 @@ $pending_verifications = $pending['pending'] ?? 0;
             background: var(--red);
             transition: width 0.3s;
         }
+        .nav-links a:hover { color: var(--red); }
+        .nav-links a:hover::after { width: 60%; }
+        .nav-links a.active { color: var(--red); }
         
-        .nav-links a:hover {
-            color: var(--red);
-        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 30px; }
         
-        .nav-links a:hover::after {
-            width: 60%;
-        }
-        
-        .nav-links a.active {
-            color: var(--red);
-        }
-        
-        .nav-links a.active::after {
-            width: 60%;
-        }
-        
-        /* Main Container */
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 30px;
-        }
-        
-        /* Header */
         .staff-header {
             display: flex;
             justify-content: space-between;
@@ -255,7 +244,6 @@ $pending_verifications = $pending['pending'] ?? 0;
             letter-spacing: 1px;
         }
         
-        /* Pending Alert */
         .pending-badge {
             background: rgba(229, 9, 20, 0.1);
             border: 1px solid var(--red);
@@ -267,7 +255,6 @@ $pending_verifications = $pending['pending'] ?? 0;
             font-weight: 500;
         }
         
-        /* Stats Grid */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -342,7 +329,6 @@ $pending_verifications = $pending['pending'] ?? 0;
             font-family: 'Montserrat', sans-serif;
         }
         
-        /* Quick Actions */
         .quick-actions {
             margin: 50px 0;
         }
@@ -407,7 +393,6 @@ $pending_verifications = $pending['pending'] ?? 0;
             font-size: 0.9rem;
         }
         
-        /* Screenings List */
         .screenings-list {
             margin-top: 20px;
         }
@@ -496,7 +481,6 @@ $pending_verifications = $pending['pending'] ?? 0;
             background: rgba(229, 9, 20, 0.1);
         }
         
-        /* Verifications Table */
         .verifications-table {
             width: 100%;
             border-collapse: collapse;
@@ -548,7 +532,6 @@ $pending_verifications = $pending['pending'] ?? 0;
             border: 1px solid #44ff44;
         }
         
-        /* Cinema Strip Divider */
         .cinema-strip {
             height: 2px;
             background: linear-gradient(90deg, transparent, var(--red), transparent);
@@ -556,44 +539,18 @@ $pending_verifications = $pending['pending'] ?? 0;
             opacity: 0.3;
         }
         
-        /* Responsive */
         @media (max-width: 1024px) {
-            .screening-item {
-                flex-wrap: wrap;
-            }
-            
-            .screening-time {
-                min-width: auto;
-            }
-            
-            .seat-progress {
-                width: 100%;
-            }
+            .screening-item { flex-wrap: wrap; }
+            .screening-time { min-width: auto; }
+            .seat-progress { width: 100%; }
         }
         
         @media (max-width: 768px) {
-            .nav-links {
-                display: none;
-            }
-            
-            h1 {
-                font-size: 2rem;
-            }
-            
-            .staff-header {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-            
-            .screening-item {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-            
-            .verifications-table {
-                overflow-x: auto;
-                display: block;
-            }
+            .nav-links { display: none; }
+            h1 { font-size: 2rem; }
+            .staff-header { flex-direction: column; align-items: flex-start; }
+            .screening-item { flex-direction: column; align-items: flex-start; }
+            .verifications-table { overflow-x: auto; display: block; }
         }
     </style>
 </head>
@@ -622,17 +579,14 @@ $pending_verifications = $pending['pending'] ?? 0;
             </div>
         </div>
         
-        <!-- Cinema Strip Divider -->
         <div class="cinema-strip"></div>
         
-        <!-- Pending Verifications Alert -->
         <?php if ($pending_verifications > 0): ?>
             <div class="pending-badge">
                 ⏳ You have <strong><?php echo $pending_verifications; ?></strong> tickets waiting to be verified today!
             </div>
         <?php endif; ?>
         
-        <!-- Stats Grid -->
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-icon">📽️</div>
@@ -654,7 +608,7 @@ $pending_verifications = $pending['pending'] ?? 0;
                 <div class="stat-icon">💰</div>
                 <div class="stat-content">
                     <h3>Today's Revenue</h3>
-                    <div class="stat-number">$<?php echo number_format($stats['revenue'] ?? 0, 2); ?></div>
+                    <div class="stat-number">₱<?php echo number_format($stats['revenue'] ?? 0, 2); ?></div>
                 </div>
             </div>
             
@@ -667,34 +621,17 @@ $pending_verifications = $pending['pending'] ?? 0;
             </div>
         </div>
         
-        <!-- Quick Actions -->
         <div class="quick-actions">
             <h2>Quick Actions</h2>
             <div class="actions-grid">
-                <a href="verify.php" class="action-card">
-                    <span class="action-icon">✅</span>
-                    <span>Verify Ticket</span>
-                </a>
-                <a href="scan.php" class="action-card">
-                    <span class="action-icon">📱</span>
-                    <span>Scan QR Code</span>
-                </a>
-                <a href="screenings.php?action=add" class="action-card">
-                    <span class="action-icon">➕</span>
-                    <span>Add Screening</span>
-                </a>
-                <a href="cinemas.php?action=add" class="action-card">
-                    <span class="action-icon">🏛️</span>
-                    <span>Add Cinema</span>
-                </a>
-                <a href="sales.php" class="action-card">
-                    <span class="action-icon">📊</span>
-                    <span>Sales Report</span>
-                </a>
+                <a href="verify.php" class="action-card"><span class="action-icon">✅</span><span>Verify Ticket</span></a>
+                <a href="scan.php" class="action-card"><span class="action-icon">📱</span><span>Scan QR Code</span></a>
+                <a href="screenings.php?action=add" class="action-card"><span class="action-icon">➕</span><span>Add Screening</span></a>
+                <a href="cinemas.php?action=add" class="action-card"><span class="action-icon">🏛️</span><span>Add Cinema</span></a>
+                <a href="sales.php" class="action-card"><span class="action-icon">📊</span><span>Sales Report</span></a>
             </div>
         </div>
         
-        <!-- Today's Screenings -->
         <h2 style="color: var(--red); margin: 30px 0 20px;">Today's Screenings</h2>
         <?php if (empty($today_screenings)): ?>
             <div style="text-align: center; padding: 40px; background: var(--card-gradient); border-radius: 16px; border: 1px solid rgba(229,9,20,0.1);">
@@ -703,23 +640,18 @@ $pending_verifications = $pending['pending'] ?? 0;
         <?php else: ?>
             <div class="screenings-list">
                 <?php foreach ($today_screenings as $screening): 
-                    $total_seats = 40; // Default
+                    $total_seats = $screening['available_seats'];
                     $sold = $screening['tickets_sold'];
-                    $available = $screening['available_seats'];
-                    $occupancy = ($sold / $total_seats) * 100;
+                    $occupancy = $total_seats > 0 ? ($sold / $total_seats) * 100 : 0;
                 ?>
                     <div class="screening-item">
-                        <div class="screening-time">
-                            <?php echo date('h:i A', strtotime($screening['show_time'])); ?>
-                        </div>
+                        <div class="screening-time"><?php echo date('h:i A', strtotime($screening['show_time'])); ?></div>
                         <div class="screening-info">
                             <h4><?php echo htmlspecialchars($screening['title']); ?></h4>
-                            <p>Screen <?php echo $screening['screen_number']; ?> • <?php echo $screening['cinema_name']; ?></p>
+                            <p>Screen <?php echo $screening['screen_number']; ?> • <?php echo htmlspecialchars($screening['cinema_name']); ?></p>
                         </div>
                         <div class="seat-progress">
-                            <div class="progress-bar">
-                                <div class="progress-fill" style="width: <?php echo $occupancy; ?>%"></div>
-                            </div>
+                            <div class="progress-bar"><div class="progress-fill" style="width: <?php echo $occupancy; ?>%"></div></div>
                             <small><?php echo $sold; ?>/<?php echo $total_seats; ?> seats</small>
                         </div>
                         <a href="tickets_list.php?screening_id=<?php echo $screening['id']; ?>" class="btn-small">View Tickets</a>
@@ -728,37 +660,25 @@ $pending_verifications = $pending['pending'] ?? 0;
             </div>
         <?php endif; ?>
         
-        <!-- Recent Verifications -->
         <h2 style="color: var(--red); margin: 40px 0 20px;">Recent Verifications</h2>
         <table class="verifications-table">
             <thead>
-                <tr>
-                    <th>Time</th>
-                    <th>Ticket Code</th>
-                    <th>Movie</th>
-                    <th>Customer</th>
-                    <th>Status</th>
-                </tr>
+                <tr><th>Time</th><th>Ticket Code</th><th>Movie</th><th>Customer</th><th>Status</th></tr>
             </thead>
             <tbody>
                 <?php foreach ($recent_verifications as $verification): ?>
-                    <tr>
-                        <td><?php echo date('h:i A', strtotime($verification['used_at'])); ?></td>
-                        <td><code><?php echo $verification['ticket_code']; ?></code></td>
-                        <td><?php echo htmlspecialchars($verification['title']); ?></td>
-                        <td><?php echo htmlspecialchars($verification['first_name'] . ' ' . $verification['last_name']); ?></td>
-                        <td><span class="badge-success">Verified</span></td>
-                    </tr>
+                    <tr><td><?php echo date('h:i A', strtotime($verification['used_at'])); ?></td>
+                    <td><code><?php echo htmlspecialchars($verification['ticket_code']); ?></code></td>
+                    <td><?php echo htmlspecialchars($verification['title']); ?></td>
+                    <td><?php echo htmlspecialchars($verification['first_name'] . ' ' . $verification['last_name']); ?></td>
+                    <td><span class="badge-success">Verified</span></td></tr>
                 <?php endforeach; ?>
                 <?php if (empty($recent_verifications)): ?>
-                    <tr>
-                        <td colspan="5" style="text-align: center; padding: 30px; color: var(--text-secondary);">No recent verifications</td>
-                    </tr>
+                    <tr><td colspan="5" style="text-align: center; padding: 30px; color: var(--text-secondary);">No recent verifications</td></tr>
                 <?php endif; ?>
             </tbody>
         </table>
     </main>
-    
     <script src="../assets/js/script.js"></script>
 </body>
 </html>

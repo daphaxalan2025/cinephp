@@ -1,44 +1,246 @@
 <?php
-// user/payment.php
+// user/payment.php - WITH PAYMONGO PAYMENT INTENTS API (TEST MODE)
+// Supports: GCash, PayMaya, Credit Card, GrabPay via PayMongo
+// REFERENCE_NUMBER REMOVED - Use transaction_id instead
+// FIXED: Removed all payment_id references from tickets table
+// FIXED: Added CSRF protection, proper error handling, seat validation
+error_reporting(E_ALL & ~E_DEPRECATED);
+ini_set('display_errors', 1);
+
 require_once '../includes/functions.php';
 requireLogin();
 
 $pdo = getDB();
 $user = getCurrentUser();
 
-$type = $_GET['type'] ?? '';
-$id = $_GET['id'] ?? 0;
-$quantity = intval($_GET['quantity'] ?? 1);
-$selected_seats = isset($_GET['seats']) ? explode(',', $_GET['seats']) : [];
-$for_user_id = $_GET['for_user_id'] ?? $user['id'];
-
-$processing_fee = 3.00; // ₱150
-
-// Map the type to database values
-$db_ticket_type = ($type == 'cinema') ? 'cinema' : 'online';
-
-// Validate for_user_id
-$purchaser_id = $user['id'];
-if ($for_user_id != $user['id']) {
-    if ($user['account_type'] == 'adult') {
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE id = ? AND parent_id = ?");
-        $stmt->execute([$for_user_id, $user['id']]);
-        if (!$stmt->fetch()) {
-            setFlash('Invalid linked account', 'error');
-            header('Location: movies.php');
-            exit;
-        }
-    } else {
-        setFlash('You cannot purchase tickets for others', 'error');
-        header('Location: movies.php');
-        exit;
-    }
+// Start session for CSRF token if not started
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-// Get item details based on type
+// Generate CSRF token if not exists
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// Custom error function with styling
+function showPaymentError($message, $back_url = null) {
+    // Use consistent theme source
+    $current_theme = $_SESSION['theme_preference'] ?? 'dark';
+    $back_url = $back_url ?? $_SERVER['HTTP_REFERER'] ?? 'movies.php';
+    ?>
+    <!DOCTYPE html>
+    <html lang="en" data-theme="<?php echo $current_theme; ?>">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Payment Error - CinemaTicket</title>
+        <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+        <style>
+            :root[data-theme="dark"] {
+                --bg-primary: #0a0a0a;
+                --bg-secondary: #1a1a1a;
+                --text-primary: #ffffff;
+                --text-secondary: #b3b3b3;
+                --accent: #e50914;
+                --accent-glow: 0 0 20px rgba(229,9,20,0.3);
+                --border-color: rgba(229,9,20,0.2);
+                --card-bg: linear-gradient(135deg, rgba(26,26,26,0.9) 0%, rgba(20,20,20,0.95) 100%);
+            }
+            :root[data-theme="light"] {
+                --bg-primary: #f5f5f5;
+                --bg-secondary: #ffffff;
+                --text-primary: #333333;
+                --text-secondary: #666666;
+                --accent: #e50914;
+                --accent-glow: 0 0 20px rgba(229,9,20,0.2);
+                --border-color: rgba(229,9,20,0.2);
+                --card-bg: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(240,240,240,0.95) 100%);
+            }
+            :root[data-theme="neon"] {
+                --bg-primary: #0a0a2a;
+                --bg-secondary: #1a1a3a;
+                --text-primary: #00ffff;
+                --text-secondary: #ff00ff;
+                --accent: #ff00ff;
+                --accent-glow: 0 0 20px rgba(255,0,255,0.5);
+                --border-color: rgba(255,0,255,0.3);
+                --card-bg: linear-gradient(135deg, rgba(26,26,58,0.9) 0%, rgba(20,20,50,0.95) 100%);
+            }
+            :root[data-theme="matrix"] {
+                --bg-primary: #000000;
+                --bg-secondary: #0a1a0a;
+                --text-primary: #00ff00;
+                --text-secondary: #00aa00;
+                --accent: #00ff00;
+                --accent-glow: 0 0 20px rgba(0,255,0,0.5);
+                --border-color: rgba(0,255,0,0.3);
+                --card-bg: linear-gradient(135deg, rgba(10,26,10,0.9) 0%, rgba(5,20,5,0.95) 100%);
+            }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+                background: var(--bg-primary);
+                color: var(--text-primary);
+                font-family: 'Inter', sans-serif;
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                position: relative;
+            }
+            body::before {
+                content: '';
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: radial-gradient(circle at 20% 50%, var(--accent) 0%, transparent 50%),
+                            radial-gradient(circle at 80% 80%, var(--accent) 0%, transparent 50%);
+                opacity: 0.03;
+                pointer-events: none;
+            }
+            .error-card {
+                background: var(--card-bg);
+                border: 1px solid var(--border-color);
+                border-radius: 32px;
+                padding: 50px 40px;
+                max-width: 500px;
+                width: 90%;
+                text-align: center;
+                box-shadow: 0 30px 60px rgba(0,0,0,0.5);
+                position: relative;
+                overflow: hidden;
+            }
+            .error-card::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 3px;
+                background: linear-gradient(90deg, transparent, var(--accent), var(--accent), transparent);
+                animation: slideBorder 3s infinite;
+            }
+            @keyframes slideBorder {
+                0% { transform: translateX(-100%); }
+                50% { transform: translateX(100%); }
+                100% { transform: translateX(100%); }
+            }
+            .error-icon { font-size: 5rem; margin-bottom: 20px; }
+            h1 { color: var(--accent); font-size: 2rem; margin-bottom: 15px; }
+            .error-message { color: var(--text-secondary); margin-bottom: 30px; line-height: 1.6; }
+            .btn {
+                display: inline-block;
+                background: var(--accent);
+                color: var(--bg-primary);
+                padding: 14px 35px;
+                border-radius: 40px;
+                text-decoration: none;
+                font-weight: 700;
+                transition: all 0.3s;
+                margin: 5px;
+            }
+            .btn:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 10px 25px var(--accent-glow);
+            }
+            .btn-secondary {
+                background: transparent;
+                border: 1px solid var(--accent);
+                color: var(--accent);
+            }
+            .btn-secondary:hover {
+                background: rgba(var(--accent),0.1);
+                color: var(--accent);
+            }
+            .cinema-strip {
+                height: 2px;
+                background: linear-gradient(90deg, transparent, var(--accent), transparent);
+                margin: 20px 0;
+                opacity: 0.3;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="error-card">
+            <div class="error-icon">⚠️</div>
+            <h1>Payment Error</h1>
+            <div class="error-message"><?php echo htmlspecialchars($message); ?></div>
+            <div class="cinema-strip"></div>
+            <a href="<?php echo htmlspecialchars($back_url); ?>" class="btn">← Go Back</a>
+            <a href="movies.php" class="btn btn-secondary">🎬 Browse Movies</a>
+        </div>
+    </body>
+    </html>
+    <?php
+    exit;
+}
+
+// Function to validate seat numbers
+function validateSeats($seats, $screening_id, $pdo) {
+    if (empty($seats)) {
+        return ['valid' => true, 'error' => null];
+    }
+    
+    foreach ($seats as $seat) {
+        if (!preg_match('/^[A-Z][0-9]+$/', $seat)) {
+            return ['valid' => false, 'error' => 'Invalid seat format: ' . htmlspecialchars($seat)];
+        }
+    }
+    
+    // Check for duplicate seat bookings
+    $placeholders = implode(',', array_fill(0, count($seats), '?'));
+    $stmt = $pdo->prepare("
+        SELECT seat_numbers FROM tickets 
+        WHERE screening_id = ? AND status IN ('paid', 'pending')
+    ");
+    $stmt->execute([$screening_id]);
+    $existing_tickets = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    $booked_seats = [];
+    foreach ($existing_tickets as $ticket) {
+        if ($ticket['seat_numbers'] && $ticket['seat_numbers'] != 'N/A') {
+            $booked = explode(',', $ticket['seat_numbers']);
+            $booked_seats = array_merge($booked_seats, $booked);
+        }
+    }
+    
+    foreach ($seats as $seat) {
+        if (in_array($seat, $booked_seats)) {
+            return ['valid' => false, 'error' => 'Seat ' . htmlspecialchars($seat) . ' is already booked.'];
+        }
+    }
+    
+    return ['valid' => true, 'error' => null];
+}
+
+// Get parameters from URL
+$type = $_GET['type'] ?? '';
+$id = intval($_GET['id'] ?? 0);
+$quantity = intval($_GET['quantity'] ?? 1);
+$for_user_id = intval($_GET['for_user_id'] ?? $user['id']);
+$selected_seats = isset($_GET['seats']) ? explode(',', $_GET['seats']) : [];
+
+// Validate required parameters
+if (empty($type) || $id <= 0) {
+    showPaymentError("Invalid request. Missing ticket type or ID.", "movies.php");
+}
+
+if ($type != 'cinema' && $type != 'online') {
+    showPaymentError("Invalid ticket type. Please select a valid ticket.", "movies.php");
+}
+
+// FORCE QUANTITY TO 1 FOR ALL TICKETS
+$quantity = 1;
+
+// Use TICKET_FEE constant from functions.php
+$fee_per_ticket = defined('TICKET_FEE') ? TICKET_FEE : 50; // ₱50 flat fee
+
+// Get item details
 if ($type == 'cinema') {
     $stmt = $pdo->prepare("
-        SELECT s.*, m.title, m.poster, c.name as cinema_name
+        SELECT s.*, m.title, m.id as movie_id, m.release_date, c.name as cinema_name
         FROM screenings s
         JOIN movies m ON s.movie_id = m.id
         JOIN cinemas c ON s.cinema_id = c.id
@@ -46,225 +248,383 @@ if ($type == 'cinema') {
     ");
     $stmt->execute([$id]);
     $item = $stmt->fetch();
-    
     if (!$item) {
-        setFlash('Screening not found', 'error');
-        header('Location: movies.php');
-        exit;
+        showPaymentError("Screening not found. It may have been removed or expired.", "movies.php");
     }
     
-    // Calculate expiry date (screening date + time)
-    $expiry_date = date('Y-m-d H:i:s', strtotime($item['show_date'] . ' ' . $item['show_time']));
-    
-    // Check seat availability
-    if (count($selected_seats) != $quantity) {
-        setFlash('Invalid seat selection', 'error');
-        header('Location: select_seats.php?screening_id=' . $id);
-        exit;
-    }
-    
-    // Verify seats are still available
-    $stmt = $pdo->prepare("SELECT seat_numbers FROM tickets WHERE screening_id = ? AND status IN ('paid', 'pending')");
-    $stmt->execute([$id]);
-    $booked = [];
-    while ($row = $stmt->fetch()) {
-        if ($row['seat_numbers']) {
-            $booked = array_merge($booked, explode(',', $row['seat_numbers']));
+    // Validate seats for cinema tickets
+    if (!empty($selected_seats)) {
+        $seat_validation = validateSeats($selected_seats, $id, $pdo);
+        if (!$seat_validation['valid']) {
+            showPaymentError($seat_validation['error'], "movie_detail.php?id=" . $item['movie_id']);
         }
     }
     
-    foreach ($selected_seats as $seat) {
-        if (in_array($seat, $booked)) {
-            setFlash('Some seats were just booked. Please select again.', 'error');
-            header('Location: select_seats.php?screening_id=' . $id);
-            exit;
-        }
-    }
-    
-} elseif ($type == 'online') {
+    // Check if user already purchased a ticket for this screening (max 1 per person)
     $stmt = $pdo->prepare("
-        SELECT os.*, m.title, m.poster
+        SELECT COUNT(*) FROM tickets 
+        WHERE user_id = ? AND screening_id = ? AND status IN ('paid', 'pending')
+    ");
+    $stmt->execute([$for_user_id, $id]);
+    $existing_tickets = $stmt->fetchColumn();
+    
+    if ($existing_tickets >= 1) {
+        showPaymentError("You have already purchased a ticket for this screening. One ticket per person only.", "movie_detail.php?id=" . $item['movie_id']);
+    }
+    
+    $base_price = $item['price'];
+    $cinema_name = $item['cinema_name'];
+    $show_info = date('M d, Y h:i A', strtotime($item['show_date'] . ' ' . $item['show_time']));
+} else { // online
+    $stmt = $pdo->prepare("
+        SELECT os.*, m.title, m.id as movie_id, m.release_date
         FROM online_schedule os
         JOIN movies m ON os.movie_id = m.id
         WHERE os.id = ?
     ");
     $stmt->execute([$id]);
     $item = $stmt->fetch();
-    
     if (!$item) {
-        setFlash('Schedule not found', 'error');
-        header('Location: movies.php');
-        exit;
+        showPaymentError("Online schedule not found. It may have been removed or expired.", "movies.php");
     }
     
-    // Calculate expiry date (online schedule time)
-    $expiry_date = date('Y-m-d H:i:s', strtotime($item['show_date'] . ' ' . $item['show_time']));
+    // For online tickets, limit to 1 per schedule
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) FROM tickets 
+        WHERE user_id = ? AND online_schedule_id = ? AND status IN ('paid', 'pending')
+    ");
+    $stmt->execute([$for_user_id, $id]);
+    $existing_tickets = $stmt->fetchColumn();
     
-    // Check viewer capacity
-    if ($item['current_viewers'] + $quantity > $item['max_viewers']) {
-        setFlash('Not enough viewer spots available', 'error');
-        header('Location: select_online.php?schedule_id=' . $id);
-        exit;
+    if ($existing_tickets > 0) {
+        showPaymentError("You have already purchased a ticket for this online schedule. One ticket per person only.", "movie_detail.php?id=" . $item['movie_id']);
     }
     
-} else {
-    setFlash('Invalid request', 'error');
-    header('Location: movies.php');
-    exit;
+    $base_price = $item['price'];
+    $cinema_name = 'Online Streaming';
+    $show_info = date('M d, Y h:i A', strtotime($item['show_date'] . ' ' . $item['show_time']));
 }
 
-$subtotal = $item['price'] * $quantity;
-$total_fee = $processing_fee * $quantity;
+$subtotal = $base_price * $quantity;
+$total_fee = $fee_per_ticket * $quantity;
 $total = $subtotal + $total_fee;
 
-// Get parent info if purchaser is a kid/teen
-$parent = null;
-if ($user['parent_id']) {
-    $stmt = $pdo->prepare("SELECT id, first_name, last_name, email FROM users WHERE id = ?");
-    $stmt->execute([$user['parent_id']]);
-    $parent = $stmt->fetch();
-}
+$seat_numbers = ($type == 'cinema' && !empty($selected_seats)) ? implode(',', $selected_seats) : 'N/A';
+$booking_reference = "BK-" . date('Ymd') . "-" . rand(1000, 9999);
 
-// Handle form submission
+// PayMongo payment methods
+$paymongo_method_types = ['gcash', 'paymaya', 'card', 'grab_pay'];
+$paymongo_display_names = [
+    'gcash' => 'GCash',
+    'paymaya' => 'PayMaya',
+    'card' => 'Credit Card',
+    'grab_pay' => 'GrabPay'
+];
+
+// ========== HANDLE FORM SUBMISSION ==========
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    // Verify CSRF token
+    if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
+        showPaymentError("Invalid security token. Please refresh the page and try again.", $_SERVER['HTTP_REFERER'] ?? 'movies.php');
+    }
+    
     $payment_method = $_POST['payment_method'] ?? '';
-    $transaction_number = $_POST['transaction_number'] ?? '';
-    $proof_file = $_FILES['proof'] ?? null;
+    $selected_paymongo_method = $_POST['paymongo_method_type'] ?? 'gcash';
     
     if (empty($payment_method)) {
-        $error = 'Please select a payment method';
-    } elseif (empty($transaction_number)) {
-        $error = 'Please enter transaction number';
+        showPaymentError("Please select a payment method.", $_SERVER['HTTP_REFERER'] ?? 'movies.php');
+    }
+    
+    // Check if it's a PayMongo method
+    $is_paymongo = in_array($payment_method, ['gcash', 'paymaya', 'credit_card', 'grab_pay']);
+    
+    // Re-validate existing tickets to prevent double payment
+    if ($type == 'cinema') {
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) FROM tickets 
+            WHERE user_id = ? AND screening_id = ? AND status IN ('paid', 'pending')
+        ");
+        $stmt->execute([$for_user_id, $id]);
+        if ($stmt->fetchColumn() >= 1) {
+            showPaymentError("You have already purchased a ticket for this screening.", "movie_detail.php?id=" . $item['movie_id']);
+        }
     } else {
-        $pdo->beginTransaction();
-        
-        try {
-            // Handle proof upload
-            $proof_filename = null;
-            if ($proof_file && $proof_file['error'] == 0) {
-                $target_dir = UPLOAD_PATH . 'proofs/';
-                if (!file_exists($target_dir)) {
-                    mkdir($target_dir, 0777, true);
-                }
-                
-                $allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
-                if (in_array($proof_file['type'], $allowed_types)) {
-                    $ext = pathinfo($proof_file['name'], PATHINFO_EXTENSION);
-                    $proof_filename = 'proof_' . time() . '_' . uniqid() . '.' . $ext;
-                    move_uploaded_file($proof_file['tmp_name'], $target_dir . $proof_filename);
-                }
-            }
-            
-            // FIRST: Create payment record (without ticket_id)
-            $transaction_id = 'TXN' . time() . rand(100, 999);
-            $stmt = $pdo->prepare("
-                INSERT INTO payments (user_id, amount, payment_method, payment_status, transaction_id, proof_of_transaction)
-                VALUES (?, ?, ?, 'pending', ?, ?)
-            ");
-            $stmt->execute([$user['id'], $total, $payment_method, $transaction_id, $proof_filename]);
-            $payment_id = $pdo->lastInsertId();
-            
-            // SECOND: Generate ticket code
-            $ticket_code = 'TIX' . time() . rand(100, 999) . strtoupper(substr(md5(uniqid()), 0, 4));
-            
-            // THIRD: Create ticket with payment_id - use correct ticket_type values
-            $seat_string = ($type == 'cinema') ? implode(',', $selected_seats) : null;
-            
-            $stmt = $pdo->prepare("
-                INSERT INTO tickets (
-                    ticket_code, user_id, screening_id, online_schedule_id, ticket_type,
-                    quantity, total_price, seat_numbers, payment_id, payment_status, status, expiry_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', 'paid', ?)
-            ");
-            
-            $screening_id_val = ($type == 'cinema') ? $id : null;
-            $online_id_val = ($type == 'online') ? $id : null;
-            
-            $stmt->execute([
-                $ticket_code,
-                $for_user_id,
-                $screening_id_val,
-                $online_id_val,
-                $db_ticket_type,  // Use mapped value
-                $quantity,
-                $total,
-                $seat_string,
-                $payment_id,
-                $expiry_date
-            ]);
-            
-            $ticket_id = $pdo->lastInsertId();
-            
-            // FOURTH: Update payment with ticket_id
-            $stmt = $pdo->prepare("UPDATE payments SET ticket_id = ? WHERE id = ?");
-            $stmt->execute([$ticket_id, $payment_id]);
-            
-            // Update available seats for cinema
-            if ($type == 'cinema') {
-                $stmt = $pdo->prepare("UPDATE screenings SET available_seats = available_seats - ? WHERE id = ?");
-                $stmt->execute([$quantity, $id]);
-            }
-            
-            // Update current viewers for online
-            if ($type == 'online') {
-                $stmt = $pdo->prepare("UPDATE online_schedule SET current_viewers = current_viewers + ? WHERE id = ?");
-                $stmt->execute([$quantity, $id]);
-            }
-            
-            $pdo->commit();
-            
-            setFlash('Payment successful! Your ticket has been generated.', 'success');
-            header('Location: purchases.php?ticket=' . $ticket_code);
-            exit;
-            
-        } catch (Exception $e) {
-            $pdo->rollBack();
-            $error = 'Payment failed: ' . $e->getMessage();
-            error_log("Payment error: " . $e->getMessage());
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) FROM tickets 
+            WHERE user_id = ? AND online_schedule_id = ? AND status IN ('paid', 'pending')
+        ");
+        $stmt->execute([$for_user_id, $id]);
+        if ($stmt->fetchColumn() > 0) {
+            showPaymentError("You have already purchased a ticket for this online schedule.", "movie_detail.php?id=" . $item['movie_id']);
         }
     }
+    
+    if ($is_paymongo) {
+        // ========== PAYMONGO PAYMENT INTENTS FLOW ==========
+        $ticket_code = 'TKT-' . strtoupper(uniqid()) . '-' . date('Ymd');
+        
+        // Calculate week_expiry for online tickets
+        $week_expiry = null;
+        if ($type == 'online') {
+            $release_date = $item['release_date'];
+            $movie_expiry = date('Y-m-d', strtotime($release_date . ' +3 months'));
+            $today = date('Y-m-d');
+            
+            if ($today >= $movie_expiry) {
+                $week_expiry = date('Y-m-d', strtotime('+7 days'));
+            } else {
+                $week_expiry = date('Y-m-d', strtotime($release_date . ' +7 days'));
+            }
+        }
+        
+        $pdo->beginTransaction();
+        try {
+            if ($type == 'cinema') {
+                $stmt = $pdo->prepare("
+                    INSERT INTO tickets (
+                        ticket_code, user_id, screening_id, ticket_type, 
+                        quantity, total_price, seat_numbers, 
+                        status, purchase_date
+                    ) VALUES (?, ?, ?, 'cinema', ?, ?, ?, 'pending', NOW())
+                ");
+                $stmt->execute([$ticket_code, $for_user_id, $id, $quantity, $total, $seat_numbers]);
+            } else {
+                $stmt = $pdo->prepare("
+                    INSERT INTO tickets (
+                        ticket_code, user_id, online_schedule_id, ticket_type, 
+                        quantity, total_price, 
+                        status, week_expiry, purchase_date
+                    ) VALUES (?, ?, ?, 'online', ?, ?, 'pending', ?, NOW())
+                ");
+                $stmt->execute([$ticket_code, $for_user_id, $id, $quantity, $total, $week_expiry]);
+            }
+            $ticket_id = $pdo->lastInsertId();
+            
+            // Create payment record with pending status
+            $transaction_id = 'TXN' . time() . rand(100, 999);
+            $stmt = $pdo->prepare("
+                INSERT INTO payments (
+                    user_id, ticket_id, amount, payment_method, payment_status, 
+                    transaction_id, payment_date
+                ) VALUES (?, ?, ?, ?, 'pending', ?, NOW())
+            ");
+            $stmt->execute([$user['id'], $ticket_id, $total, $payment_method, $transaction_id]);
+            $payment_id = $pdo->lastInsertId();
+            
+            // DO NOT update tickets table - relationship is maintained via payments.ticket_id
+            
+            $pdo->commit();
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            showPaymentError("Failed to create ticket: " . $e->getMessage(), "movies.php");
+        }
+        
+        // ========== PAYMONGO CHECKOUT ==========
+        try {
+            // Map selected method to PayMongo format
+            $paymongo_method_type = $selected_paymongo_method;
+            if ($payment_method == 'credit_card') {
+                $paymongo_method_type = 'card';
+            }
+            
+            $checkout_data = [
+                'data' => [
+                    'attributes' => [
+                        'line_items' => [
+                            [
+                                'currency' => 'PHP',
+                                'amount' => round($total * 100),
+                                'name' => $item['title'],
+                                'quantity' => 1
+                            ]
+                        ],
+                        'payment_method_types' => [$paymongo_method_type],
+                        'success_url' => BASE_URL . "/user/payment-success.php?ticket=$ticket_code&checkout=1&payment_id=$payment_id",
+                        'cancel_url' => BASE_URL . "/user/payment.php?cancelled=1&type=$type&id=$id",
+                        'description' => "Booking {$booking_reference} - {$item['title']}",
+                        'metadata' => [
+                            'ticket_code' => $ticket_code,
+                            'payment_id' => (string)$payment_id,
+                            'user_id' => (string)$user['id']
+                        ]
+                    ]
+                ]
+            ];
+
+            $ch = curl_init("https://api.paymongo.com/v1/checkout_sessions");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_TIMEOUT => 30,
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/json',
+                    'Authorization: Basic ' . base64_encode(PAYMONGO_SECRET_KEY . ':')
+                ],
+                CURLOPT_POSTFIELDS => json_encode($checkout_data)
+            ]);
+
+            $response = curl_exec($ch);
+            $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curl_error = curl_error($ch);
+            curl_close($ch);
+
+            if ($curl_error) {
+                // Rollback on API failure
+                $pdo->prepare("UPDATE tickets SET status = 'cancelled' WHERE id = ?")->execute([$ticket_id]);
+                $pdo->prepare("UPDATE payments SET payment_status = 'failed' WHERE id = ?")->execute([$payment_id]);
+                showPaymentError("Connection error: " . $curl_error, "movies.php");
+            }
+
+            if ($http !== 200 && $http !== 201) {
+                // Rollback on API failure
+                $pdo->prepare("UPDATE tickets SET status = 'cancelled' WHERE id = ?")->execute([$ticket_id]);
+                $pdo->prepare("UPDATE payments SET payment_status = 'failed' WHERE id = ?")->execute([$payment_id]);
+                
+                $error = json_decode($response, true);
+                $error_msg = $error['errors'][0]['detail'] ?? 'Unknown error occurred';
+                showPaymentError("Checkout Error: " . $error_msg, "movies.php");
+            }
+
+            $result = json_decode($response, true);
+            $checkout_url = $result['data']['attributes']['checkout_url'];
+            $checkout_id = $result['data']['id'];
+
+            // Save checkout ID to payment record
+            $pdo->prepare("UPDATE payments SET paymongo_checkout_id = ? WHERE id = ?")
+                ->execute([$checkout_id, $payment_id]);
+
+            header("Location: " . $checkout_url);
+            exit;
+
+        } catch (Exception $e) {
+            // Rollback on exception
+            $pdo->prepare("UPDATE tickets SET status = 'cancelled' WHERE id = ?")->execute([$ticket_id]);
+            $pdo->prepare("UPDATE payments SET payment_status = 'failed' WHERE id = ?")->execute([$payment_id]);
+            showPaymentError("Checkout Exception: " . $e->getMessage(), "movies.php");
+        }
+        
+    } else {
+        // ========== MANUAL PAYMENT FLOW (Removed - no longer supported) ==========
+        showPaymentError("Manual payment methods are currently disabled. Please use GCash, PayMaya, Credit Card, or GrabPay.", "movies.php");
+    }
 }
+
+// Function to upload proof of payment (kept for reference but not used)
+function uploadProofOfPayment($file) {
+    $target_dir = dirname(__DIR__, 2) . '/uploads/proofs/';
+    
+    if (!file_exists($target_dir)) {
+        mkdir($target_dir, 0777, true);
+    }
+    
+    // Add .htaccess protection
+    $htaccess = $target_dir . '.htaccess';
+    if (!file_exists($htaccess)) {
+        file_put_contents($htaccess, "Order Deny,Allow\nDeny from all\n");
+    }
+    
+    if (!is_writable($target_dir)) {
+        return ['success' => false, 'error' => 'Upload directory is not writable'];
+    }
+    
+    $allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+    $max_size = 5 * 1024 * 1024;
+    
+    if (!in_array($file['type'], $allowed_types)) {
+        return ['success' => false, 'error' => 'Invalid file type. Only JPG, PNG, GIF, WEBP, and PDF are allowed.'];
+    }
+    
+    if ($file['size'] > $max_size) {
+        return ['success' => false, 'error' => 'File too large. Maximum size is 5MB.'];
+    }
+    
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        return ['success' => false, 'error' => 'Upload failed.'];
+    }
+    
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    $filename = 'proof_' . uniqid() . '_' . time() . '.' . $ext;
+    $target_file = $target_dir . $filename;
+    
+    if (move_uploaded_file($file['tmp_name'], $target_file)) {
+        chmod($target_file, 0644);
+        return ['success' => true, 'filename' => $filename];
+    }
+    
+    return ['success' => false, 'error' => 'Failed to move uploaded file.'];
+}
+
+// Get current theme for the main page
+$current_theme = $user['theme_preference'] ?? 'dark';
+
+// Regenerate CSRF token for new form
+$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+$csrf_token = $_SESSION['csrf_token'];
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<?php echo $current_theme; ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Payment - CinemaTicket</title>
-    <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --black: #0a0a0a;
-            --deep-gray: #1a1a1a;
-            --medium-gray: #2a2a2a;
-            --light-gray: #333333;
-            --red: #e50914;
-            --red-dark: #b2070f;
-            --red-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+        :root[data-theme="dark"] {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #1a1a1a;
             --text-primary: #ffffff;
             --text-secondary: #b3b3b3;
-            --glass-bg: rgba(26, 26, 26, 0.7);
-            --glass-border: rgba(255, 255, 255, 0.05);
-            --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
+            --accent: #e50914;
+            --accent-dark: #b2070f;
+            --accent-glow: 0 0 20px rgba(229,9,20,0.3);
+            --border-color: rgba(229,9,20,0.2);
+            --card-bg: linear-gradient(135deg, rgba(26,26,26,0.9) 0%, rgba(20,20,20,0.95) 100%);
         }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root[data-theme="light"] {
+            --bg-primary: #f5f5f5;
+            --bg-secondary: #ffffff;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --accent: #e50914;
+            --accent-dark: #b2070f;
+            --accent-glow: 0 0 20px rgba(229,9,20,0.2);
+            --border-color: rgba(229,9,20,0.2);
+            --card-bg: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(240,240,240,0.95) 100%);
         }
-        
+        :root[data-theme="neon"] {
+            --bg-primary: #0a0a2a;
+            --bg-secondary: #1a1a3a;
+            --text-primary: #00ffff;
+            --text-secondary: #ff00ff;
+            --accent: #ff00ff;
+            --accent-dark: #cc00cc;
+            --accent-glow: 0 0 20px rgba(255,0,255,0.5);
+            --border-color: rgba(255,0,255,0.3);
+            --card-bg: linear-gradient(135deg, rgba(26,26,58,0.9) 0%, rgba(20,20,50,0.95) 100%);
+        }
+        :root[data-theme="matrix"] {
+            --bg-primary: #000000;
+            --bg-secondary: #0a1a0a;
+            --text-primary: #00ff00;
+            --text-secondary: #00aa00;
+            --accent: #00ff00;
+            --accent-dark: #00aa00;
+            --accent-glow: 0 0 20px rgba(0,255,0,0.5);
+            --border-color: rgba(0,255,0,0.3);
+            --card-bg: linear-gradient(135deg, rgba(10,26,10,0.9) 0%, rgba(5,20,5,0.95) 100%);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            background: var(--black);
+            background: var(--bg-primary);
             color: var(--text-primary);
             font-family: 'Inter', sans-serif;
-            font-weight: 400;
-            line-height: 1.6;
             min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             position: relative;
         }
-        
         body::before {
             content: '';
             position: fixed;
@@ -272,572 +632,274 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             left: 0;
             right: 0;
             bottom: 0;
-            background: radial-gradient(circle at 20% 50%, rgba(229, 9, 20, 0.03) 0%, transparent 50%),
-                        radial-gradient(circle at 80% 80%, rgba(229, 9, 20, 0.03) 0%, transparent 50%);
+            background: radial-gradient(circle at 20% 50%, var(--accent) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, var(--accent) 0%, transparent 50%);
+            opacity: 0.03;
             pointer-events: none;
             z-index: -1;
         }
-        
-        /* Navigation */
-        .navbar {
-            background: rgba(10, 10, 10, 0.95);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
-            position: sticky;
-            top: 0;
-            z-index: 1000;
-        }
-        
-        .nav-container {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 30px;
-        }
-        
-        .logo {
-            color: var(--red);
-            font-size: 1.8rem;
-            font-weight: 800;
-            font-family: 'Montserrat', sans-serif;
-            text-decoration: none;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            position: relative;
-            transition: all 0.3s;
-        }
-        
-        .logo:hover {
-            text-shadow: var(--red-glow);
-        }
-        
-        .logo::before {
-            content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
-            filter: drop-shadow(0 0 5px var(--red));
-        }
-        
-        .nav-links {
-            display: flex;
-            gap: 25px;
-            align-items: center;
-        }
-        
-        .nav-links a {
-            color: var(--text-primary);
-            text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
-            transition: all 0.3s;
-            font-weight: 500;
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            position: relative;
-        }
-        
-        .nav-links a::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 0;
-            height: 2px;
-            background: var(--red);
-            transition: width 0.3s;
-        }
-        
-        .nav-links a:hover {
-            color: var(--red);
-        }
-        
-        .nav-links a:hover::after {
-            width: 60%;
-        }
-        
-        .nav-links a.active {
-            color: var(--red);
-        }
-        
-        .nav-links a.active::after {
-            width: 60%;
-        }
-        
-        /* Main Container */
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 30px;
-        }
-        
-        h1 {
-            font-size: 2.5rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin: 0 0 30px 0;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-        
         .payment-container {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        
-        /* Cards */
-        .card {
-            background: var(--card-gradient);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.2);
-            border-radius: 24px;
-            padding: 30px;
-            margin-bottom: 20px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 32px;
+            padding: 40px;
+            max-width: 600px;
+            width: 90%;
+            margin: 20px;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.5);
             position: relative;
             overflow: hidden;
         }
-        
-        .card::before {
+        .payment-container::before {
             content: '';
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            height: 3px;
+            background: linear-gradient(90deg, transparent, var(--accent), var(--accent), transparent);
             animation: slideBorder 3s infinite;
         }
-        
         @keyframes slideBorder {
             0% { transform: translateX(-100%); }
             50% { transform: translateX(100%); }
             100% { transform: translateX(100%); }
         }
-        
-        .card h2 {
-            color: var(--red);
-            margin-bottom: 20px;
-            font-size: 1.5rem;
-            font-weight: 600;
+        h1 {
+            color: var(--accent);
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2rem;
+            font-family: 'Montserrat', sans-serif;
         }
-        
-        /* Parent Notice */
-        .parent-notice {
-            background: rgba(229, 9, 20, 0.1);
-            border: 1px solid var(--red);
-            color: var(--text-primary);
-            padding: 15px 20px;
-            border-radius: 40px;
-            margin-bottom: 20px;
-            border-left: 4px solid var(--red);
+        .order-summary {
+            background: rgba(0,0,0,0.3);
+            padding: 25px;
+            border-radius: 20px;
+            margin-bottom: 25px;
+            border: 1px solid var(--border-color);
         }
-        
-        /* Movie Summary */
-        .movie-summary {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 20px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-        }
-        
-        .poster {
-            width: 80px;
-            height: 120px;
-            object-fit: cover;
-            border: 2px solid rgba(229, 9, 20, 0.3);
-            border-radius: 8px;
-            transition: all 0.3s;
-        }
-        
-        .poster:hover {
-            border-color: var(--red);
-            transform: scale(1.05);
-        }
-        
-        .movie-details h3 {
-            color: #fff;
-            margin-bottom: 5px;
-            font-size: 1.2rem;
-        }
-        
-        .movie-details p {
-            color: var(--text-secondary);
-            margin: 2px 0;
-        }
-        
-        .movie-details .highlight {
-            color: var(--red);
-            font-weight: 600;
-        }
-        
-        .movie-details .for-user {
-            color: #ffff44;
-            margin-top: 5px;
-        }
-        
-        /* Expiry Info */
-        .expiry-info {
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(229, 9, 20, 0.2);
-            border-radius: 16px;
-            padding: 15px;
-            margin: 20px 0;
-            color: var(--text-secondary);
-        }
-        
-        .expiry-info strong {
-            color: var(--red);
-        }
-        
-        .expiry-info small {
-            display: block;
-            margin-top: 5px;
-            color: #666;
-        }
-        
-        /* Order Rows */
-        .row {
+        .order-summary p {
+            margin: 10px 0;
             display: flex;
             justify-content: space-between;
-            margin: 10px 0;
-            padding: 10px 0;
-            border-bottom: 1px solid rgba(229, 9, 20, 0.1);
-            color: var(--text-secondary);
+            flex-wrap: wrap;
+            gap: 10px;
         }
-        
         .total {
             font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--red);
-            border-top: 2px solid var(--red);
-            margin-top: 20px;
-            padding-top: 20px;
-            display: flex;
-            justify-content: space-between;
+            font-weight: bold;
+            color: var(--accent);
+            text-align: right;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
         }
-        
-        /* Form Elements */
         .form-group {
-            margin-bottom: 25px;
+            margin-bottom: 20px;
         }
-        
         .form-group label {
             display: block;
-            color: var(--red);
             margin-bottom: 8px;
+            color: var(--accent);
             font-weight: 600;
+            font-size: 0.85rem;
             text-transform: uppercase;
             letter-spacing: 1px;
-            font-size: 0.8rem;
         }
-        
-        .form-group input,
-        .form-group select {
-            width: 100%;
-            padding: 14px 18px;
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(229, 9, 20, 0.2);
-            color: var(--text-primary);
-            border-radius: 40px;
-            font-family: 'Inter', sans-serif;
-            transition: all 0.3s;
+        .payment-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
         }
-        
-        .form-group input:focus,
-        .form-group select:focus {
-            border-color: var(--red);
-            outline: none;
-            box-shadow: 0 0 20px rgba(229, 9, 20, 0.2);
-        }
-        
-        .form-group small {
-            display: block;
-            color: var(--text-secondary);
-            font-size: 0.75rem;
-            margin-top: 5px;
-            padding-left: 15px;
-        }
-        
-        /* File Upload */
-        .file-upload {
-            border: 2px dashed rgba(229, 9, 20, 0.3);
-            padding: 25px;
+        .payment-option {
+            background: rgba(0,0,0,0.3);
+            border: 2px solid var(--border-color);
+            border-radius: 16px;
+            padding: 15px 10px;
             text-align: center;
-            border-radius: 40px;
             cursor: pointer;
-            transition: all 0.3s;
-        }
-        
-        .file-upload:hover {
-            border-color: var(--red);
-            background: rgba(229, 9, 20, 0.05);
-        }
-        
-        .file-upload input {
-            display: none;
-        }
-        
-        .file-upload span {
-            color: var(--text-secondary);
-        }
-        
-        .file-name {
-            margin-top: 10px;
-            color: var(--red);
-            font-size: 0.9rem;
-        }
-        
-        /* Pay Button */
-        .pay-button {
-            width: 100%;
-            padding: 16px;
-            background: var(--red);
-            color: #fff;
-            border: none;
-            border-radius: 40px;
-            font-size: 1.2rem;
-            font-weight: 700;
-            cursor: pointer;
-            margin-top: 20px;
             transition: all 0.3s;
             position: relative;
-            overflow: hidden;
-            text-transform: uppercase;
-            letter-spacing: 2px;
         }
-        
-        .pay-button::before {
-            content: '';
+        .payment-option:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+        .payment-option.selected {
+            border-color: var(--accent);
+            background: rgba(var(--accent), 0.1);
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+        .payment-option input[type="radio"] {
             position: absolute;
-            top: 0;
-            left: -100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+        .payment-option .option-icon {
+            font-size: 2rem;
+            margin-bottom: 8px;
+        }
+        .payment-option .option-name {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        .btn-submit {
             width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s;
-        }
-        
-        .pay-button:hover {
-            background: var(--red-dark);
-            transform: translateY(-3px);
-            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.4);
-        }
-        
-        .pay-button:hover::before {
-            left: 100%;
-        }
-        
-        /* Info Box */
-        .info-box {
-            margin-top: 20px;
-            padding: 20px;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 16px;
-            border: 1px solid rgba(229, 9, 20, 0.1);
-        }
-        
-        .info-box p {
-            color: var(--text-secondary);
-            margin: 5px 0;
-        }
-        
-        .info-box strong {
-            color: var(--red);
-        }
-        
-        /* Error */
-        .error {
-            color: #ff4444;
-            margin-bottom: 20px;
-            padding: 15px 20px;
-            background: rgba(255, 68, 68, 0.1);
-            border: 1px solid #ff4444;
+            padding: 16px;
+            background: var(--accent);
+            border: none;
             border-radius: 40px;
-            border-left: 4px solid #ff4444;
+            color: var(--bg-primary);
+            font-weight: 700;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 20px;
+            font-family: 'Montserrat', sans-serif;
         }
-        
-        /* Cinema Strip Divider */
-        .cinema-strip {
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
+        .btn-submit:hover {
+            background: var(--accent-dark);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px var(--accent-glow);
+        }
+        .back-link {
+            display: block;
+            text-align: center;
+            color: var(--accent);
+            margin-top: 25px;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .info-note {
+            font-size: 0.8rem;
+            color: #ff8844;
+            text-align: center;
+            margin-top: 20px;
+            padding: 12px;
+            background: rgba(255,136,68,0.1);
+            border-radius: 40px;
+        }
+        hr {
+            border-color: var(--border-color);
             margin: 20px 0;
-            opacity: 0.3;
         }
-        
-        /* Responsive */
-        @media (max-width: 768px) {
-            .nav-links {
-                display: none;
-            }
-            
-            h1 {
-                font-size: 2rem;
-            }
-            
-            .movie-summary {
-                flex-direction: column;
-                align-items: center;
-                text-align: center;
-            }
-            
-            .card {
-                padding: 20px;
-            }
+        @media (max-width: 600px) {
+            .payment-container { padding: 25px; margin: 15px; }
+            h1 { font-size: 1.5rem; }
+            .order-summary p { flex-direction: column; align-items: flex-start; }
+            .total { text-align: left; }
+            .payment-options { grid-template-columns: 1fr 1fr; }
         }
     </style>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="nav-container">
-            <a href="../index.php" class="logo">CINEMA TICKET</a>
-            <div class="nav-links">
-                <a href="movies.php">Movies</a>
-                <a href="favorites.php">Favorites</a>
-                <a href="history.php">History</a>
-                <a href="purchases.php">My Tickets</a>
-                <a href="profile.php">Profile</a>
-                <a href="settings.php">Settings</a>
-                <a href="../auth/logout.php">Logout</a>
-            </div>
+    <div class="payment-container">
+        <h1>💳 Complete Payment</h1>
+        
+        <div class="order-summary">
+            <p><strong>🎬 <?php echo htmlspecialchars($item['title']); ?></strong></p>
+            <p><?php echo $type == 'cinema' ? '🏛️ Cinema Ticket' : '💻 Online Streaming Ticket'; ?></p>
+            <p>🏢 <?php echo htmlspecialchars($cinema_name); ?></p>
+            <p>📅 <?php echo htmlspecialchars($show_info); ?></p>
+            <?php if ($type == 'cinema' && !empty($selected_seats)): ?>
+                <p>💺 Seats: <?php echo htmlspecialchars(implode(', ', $selected_seats)); ?></p>
+            <?php endif; ?>
+            <p>📦 Quantity: 1</p>
+            <p>🎟️ Price per ticket: ₱<?php echo number_format($base_price, 2); ?></p>
+            <p>⚙️ Service Fee: ₱<?php echo number_format($fee_per_ticket, 2); ?></p>
+            <div class="total">💰 Total: ₱<?php echo number_format($total, 2); ?></div>
         </div>
-    </nav>
-    
-    <main class="container">
-        <h1>Complete Payment</h1>
         
-        <!-- Parent notice for kids/teens -->
-        <?php if ($user['parent_id'] && $parent): ?>
-            <div class="parent-notice">
-                👤 This purchase will be sent to your parent (<?php echo htmlspecialchars($parent['first_name']); ?>) for approval.
-            </div>
-        <?php endif; ?>
-        
-        <!-- Cinema Strip Divider -->
-        <div class="cinema-strip"></div>
-        
-        <?php if (isset($error)): ?>
-            <div class="error"><?php echo htmlspecialchars($error); ?></div>
-        <?php endif; ?>
-        
-        <div class="payment-container">
-            <!-- Order Summary -->
-            <div class="card">
-                <h2>Order Summary</h2>
-                
-                <div class="movie-summary">
-                    <?php if ($item['poster']): ?>
-                        <img src="../uploads/posters/<?php echo $item['poster']; ?>" class="poster">
-                    <?php else: ?>
-                        <div style="width:80px; height:120px; background:var(--deep-gray); border:2px solid rgba(229,9,20,0.3); border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--text-secondary);">
-                            No Poster
-                        </div>
-                    <?php endif; ?>
-                    
-                    <div class="movie-details">
-                        <h3><?php echo htmlspecialchars($item['title']); ?></h3>
-                        <p><?php echo ucfirst($type); ?> Ticket</p>
-                        <?php if ($type == 'cinema' && !empty($selected_seats)): ?>
-                            <p class="highlight">Seats: <?php echo implode(', ', $selected_seats); ?></p>
-                        <?php endif; ?>
-                        <?php if ($for_user_id != $user['id']): ?>
-                            <?php
-                            $stmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");
-                            $stmt->execute([$for_user_id]);
-                            $for_user = $stmt->fetch();
-                            ?>
-                            <p class="for-user">For: <?php echo htmlspecialchars($for_user['first_name'] . ' ' . $for_user['last_name']); ?></p>
-                        <?php endif; ?>
-                    </div>
-                </div>
-                
-                <div class="expiry-info">
-                    <strong>⏰ Ticket Expiry:</strong> 
-                    <?php echo date('F d, Y h:i A', strtotime($expiry_date)); ?>
-                    <br>
-                    <small>Ticket will expire after this time and cannot be used</small>
-                </div>
-                
-                <div class="row">
-                    <span>Price per ticket:</span>
-                    <span>$<?php echo number_format($item['price'], 2); ?></span>
-                </div>
-                <div class="row">
-                    <span>Quantity:</span>
-                    <span><?php echo $quantity; ?> ticket(s)</span>
-                </div>
-                <div class="row">
-                    <span>Subtotal:</span>
-                    <span>$<?php echo number_format($subtotal, 2); ?></span>
-                </div>
-                <div class="row">
-                    <span>Processing Fee (₱150 each):</span>
-                    <span>$<?php echo number_format($total_fee, 2); ?></span>
-                </div>
-                <div class="total">
-                    <span>TOTAL:</span>
-                    <span>$<?php echo number_format($total, 2); ?></span>
+        <form method="POST" action="" id="paymentForm">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
+            
+            <div class="form-group">
+                <label>Select Payment Method</label>
+                <div class="payment-options">
+                    <label class="payment-option" data-method="gcash">
+                        <input type="radio" name="payment_method" value="gcash" required>
+                        <div class="option-icon">💚</div>
+                        <div class="option-name">GCash</div>
+                    </label>
+                    <label class="payment-option" data-method="paymaya">
+                        <input type="radio" name="payment_method" value="paymaya">
+                        <div class="option-icon">💙</div>
+                        <div class="option-name">PayMaya</div>
+                    </label>
+                    <label class="payment-option" data-method="credit_card">
+                        <input type="radio" name="payment_method" value="credit_card">
+                        <div class="option-icon">💳</div>
+                        <div class="option-name">Credit Card</div>
+                    </label>
+                    <label class="payment-option" data-method="grab_pay">
+                        <input type="radio" name="payment_method" value="grab_pay">
+                        <div class="option-icon">🟢</div>
+                        <div class="option-name">GrabPay</div>
+                    </label>
                 </div>
             </div>
             
-            <!-- Payment Form -->
-            <div class="card">
-                <h2>Payment Details</h2>
-                
-                <form method="POST" enctype="multipart/form-data">
-                    <div class="form-group">
-                        <label>Payment Method</label>
-                        <select name="payment_method" required>
-                            <option value="">Select payment method</option>
-                            <option value="gcash">📱 GCash</option>
-                            <option value="paypal">🅿️ PayPal</option>
-                            <option value="bank_transfer">🏦 Bank Transfer</option>
-                            <option value="credit_card">💳 Credit Card</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>Transaction / Reference Number</label>
-                        <input type="text" name="transaction_number" placeholder="Enter transaction/reference number" required>
-                        <small>Your payment reference/transaction number from GCash, PayPal, or bank transfer</small>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>Proof of Payment</label>
-                        <div class="file-upload" onclick="document.getElementById('proof').click()">
-                            <input type="file" id="proof" name="proof" accept="image/*,application/pdf" onchange="updateFileName(this)">
-                            <span>📎 Click to upload screenshot or receipt</span>
-                            <div id="fileName" class="file-name"></div>
-                        </div>
-                        <small>Upload screenshot of your payment confirmation or receipt (JPG, PNG, PDF)</small>
-                    </div>
-                    
-                    <button type="submit" class="pay-button">
-                        Confirm Payment - $<?php echo number_format($total, 2); ?>
-                    </button>
-                </form>
-                
-                <div class="info-box">
-                    <p>📝 <strong>What is CVV?</strong> The 3-digit security code on the back of your credit card.</p>
-                    <p>For GCash/PayPal/Bank Transfer, use the transaction/reference number from your payment app.</p>
-                </div>
-            </div>
+            <input type="hidden" name="paymongo_method_type" id="paymongo_method_type" value="gcash">
+            
+            <button type="submit" class="btn-submit">💳 Proceed to Secure Checkout</button>
+        </form>
+        
+        <div class="info-note">
+            🔒 <strong>Secure Payment via PayMongo</strong><br>
+            Your payment is processed securely. We accept GCash, PayMaya, Credit Card, and GrabPay.
         </div>
-    </main>
+        
+        <hr>
+        
+        <a href="movie_detail.php?id=<?php echo $item['movie_id']; ?>" class="back-link">← Back to Movie</a>
+    </div>
     
     <script>
-        function updateFileName(input) {
-            const fileName = input.files[0]?.name;
-            document.getElementById('fileName').textContent = fileName ? 'Selected: ' + fileName : '';
+        const paymentOptions = document.querySelectorAll('.payment-option');
+        const paymongoMethodType = document.getElementById('paymongo_method_type');
+        
+        paymentOptions.forEach(option => {
+            const radio = option.querySelector('input[type="radio"]');
+            
+            option.addEventListener('click', () => {
+                radio.checked = true;
+                
+                // Update selected styling
+                paymentOptions.forEach(opt => opt.classList.remove('selected'));
+                option.classList.add('selected');
+                
+                // Update hidden field for PayMongo
+                const method = radio.value;
+                if (method === 'credit_card') {
+                    paymongoMethodType.value = 'card';
+                } else {
+                    paymongoMethodType.value = method;
+                }
+            });
+            
+            // Check if pre-selected
+            if (radio.checked) {
+                option.classList.add('selected');
+                const method = radio.value;
+                if (method === 'credit_card') {
+                    paymongoMethodType.value = 'card';
+                } else {
+                    paymongoMethodType.value = method;
+                }
+            }
+        });
+        
+        // Select first option by default
+        if (!document.querySelector('input[name="payment_method"]:checked')) {
+            const firstOption = document.querySelector('.payment-option');
+            if (firstOption) {
+                firstOption.click();
+            }
         }
     </script>
 </body>

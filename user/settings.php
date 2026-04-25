@@ -1,5 +1,5 @@
 <?php
-// user/settings.php
+// user/settings.php - FIXED: Flash message array to string conversion error
 require_once '../includes/functions.php';
 requireLogin();
 
@@ -40,21 +40,59 @@ $current_theme = $user['theme_preference'] ?? 'dark';
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --black: #0a0a0a;
-            --deep-gray: #1a1a1a;
-            --medium-gray: #2a2a2a;
-            --light-gray: #333333;
-            --red: #e50914;
-            --red-dark: #b2070f;
-            --red-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+        /* Theme Variables - User can change these via theme selection */
+        :root[data-theme="dark"] {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #2a2a2a;
             --text-primary: #ffffff;
             --text-secondary: #b3b3b3;
-            --glass-bg: rgba(26, 26, 26, 0.7);
-            --glass-border: rgba(255, 255, 255, 0.05);
-            --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
+            --accent: #e50914;
+            --accent-dark: #b2070f;
+            --accent-glow: 0 0 20px rgba(229, 9, 20, 0.3);
+            --border-color: rgba(229, 9, 20, 0.2);
+            --card-bg: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
         }
-        
+
+        :root[data-theme="light"] {
+            --bg-primary: #f5f5f5;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #e0e0e0;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --accent: #e50914;
+            --accent-dark: #b2070f;
+            --accent-glow: 0 0 20px rgba(229, 9, 20, 0.2);
+            --border-color: rgba(229, 9, 20, 0.2);
+            --card-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(240, 240, 240, 0.95) 100%);
+        }
+
+        :root[data-theme="neon"] {
+            --bg-primary: #0a0a2a;
+            --bg-secondary: #1a1a3a;
+            --bg-tertiary: #2a2a4a;
+            --text-primary: #00ffff;
+            --text-secondary: #ff00ff;
+            --accent: #ff00ff;
+            --accent-dark: #cc00cc;
+            --accent-glow: 0 0 20px rgba(255, 0, 255, 0.5);
+            --border-color: rgba(255, 0, 255, 0.3);
+            --card-bg: linear-gradient(135deg, rgba(26, 26, 58, 0.9) 0%, rgba(20, 20, 50, 0.95) 100%);
+        }
+
+        :root[data-theme="matrix"] {
+            --bg-primary: #000000;
+            --bg-secondary: #0a1a0a;
+            --bg-tertiary: #0f2a0f;
+            --text-primary: #00ff00;
+            --text-secondary: #00aa00;
+            --accent: #00ff00;
+            --accent-dark: #00aa00;
+            --accent-glow: 0 0 20px rgba(0, 255, 0, 0.5);
+            --border-color: rgba(0, 255, 0, 0.3);
+            --card-bg: linear-gradient(135deg, rgba(10, 26, 10, 0.9) 0%, rgba(5, 20, 5, 0.95) 100%);
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -62,13 +100,14 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         }
         
         body {
-            background: var(--black);
+            background: var(--bg-primary);
             color: var(--text-primary);
             font-family: 'Inter', sans-serif;
             font-weight: 400;
             line-height: 1.6;
             min-height: 100vh;
             position: relative;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
         
         body::before {
@@ -78,73 +117,78 @@ $current_theme = $user['theme_preference'] ?? 'dark';
             left: 0;
             right: 0;
             bottom: 0;
-            background: radial-gradient(circle at 20% 50%, rgba(229, 9, 20, 0.03) 0%, transparent 50%),
-                        radial-gradient(circle at 80% 80%, rgba(229, 9, 20, 0.03) 0%, transparent 50%);
+            background: radial-gradient(circle at 20% 50%, var(--accent) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, var(--accent) 0%, transparent 50%);
+            opacity: 0.03;
             pointer-events: none;
             z-index: -1;
         }
         
         /* Navigation */
         .navbar {
-            background: rgba(10, 10, 10, 0.95);
+            background: rgba(var(--bg-secondary), 0.95);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.8rem 0;
             position: sticky;
             top: 0;
             z-index: 1000;
         }
         
         .nav-container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 20px;
         }
         
         .logo {
-            color: var(--red);
-            font-size: 1.8rem;
+            color: var(--accent);
+            font-size: 1.5rem;
             font-weight: 800;
             font-family: 'Montserrat', sans-serif;
             text-decoration: none;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 1.5px;
             position: relative;
             transition: all 0.3s;
+            white-space: nowrap;
         }
         
         .logo:hover {
-            text-shadow: var(--red-glow);
+            text-shadow: var(--accent-glow);
         }
         
         .logo::before {
             content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
-            filter: drop-shadow(0 0 5px var(--red));
+            margin-right: 8px;
+            font-size: 1.2rem;
+            filter: drop-shadow(0 0 5px var(--accent));
         }
         
         .nav-links {
             display: flex;
-            gap: 25px;
+            gap: 5px;
             align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
         }
         
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             transition: all 0.3s;
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             position: relative;
+            white-space: nowrap;
         }
         
         .nav-links a::after {
@@ -155,12 +199,12 @@ $current_theme = $user['theme_preference'] ?? 'dark';
             transform: translateX(-50%);
             width: 0;
             height: 2px;
-            background: var(--red);
+            background: var(--accent);
             transition: width 0.3s;
         }
         
         .nav-links a:hover {
-            color: var(--red);
+            color: var(--accent);
         }
         
         .nav-links a:hover::after {
@@ -168,24 +212,40 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         }
         
         .nav-links a.active {
-            color: var(--red);
+            color: var(--accent);
         }
         
         .nav-links a.active::after {
             width: 60%;
         }
         
+        .profile-switch {
+            background: rgba(229, 9, 20, 0.15);
+            border: 1px solid #e50914;
+            border-radius: 40px;
+            padding: 6px 15px !important;
+            margin-left: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .profile-switch:hover {
+            background: #e50914;
+            color: white !important;
+        }
+        
         /* Main Container */
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
-            padding: 30px;
+            padding: 30px 20px;
         }
         
         h1 {
             font-size: 2.5rem;
             font-weight: 800;
-            background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -204,10 +264,10 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         
         /* Sidebar */
         .settings-sidebar {
-            background: var(--card-gradient);
+            background: var(--card-bg);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            border: 1px solid var(--border-color);
             border-radius: 24px;
             padding: 25px;
             height: fit-content;
@@ -222,7 +282,7 @@ $current_theme = $user['theme_preference'] ?? 'dark';
             left: 0;
             right: 0;
             height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
             animation: slideBorder 3s infinite;
         }
         
@@ -253,18 +313,18 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         
         .settings-menu a:hover,
         .settings-menu a.active {
-            border-color: var(--red);
-            background: rgba(229, 9, 20, 0.1);
-            color: var(--red);
+            border-color: var(--accent);
+            background: rgba(var(--accent), 0.1);
+            color: var(--accent);
             transform: translateX(5px);
         }
         
         /* Content */
         .settings-content {
-            background: var(--card-gradient);
+            background: var(--card-bg);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            border: 1px solid var(--border-color);
             border-radius: 24px;
             padding: 35px;
             position: relative;
@@ -278,7 +338,7 @@ $current_theme = $user['theme_preference'] ?? 'dark';
             left: 0;
             right: 0;
             height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
             animation: slideBorder 3s infinite;
         }
         
@@ -297,7 +357,7 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         }
         
         .settings-section h2 {
-            color: var(--red);
+            color: var(--accent);
             margin-bottom: 15px;
             font-size: 1.8rem;
             font-family: 'Montserrat', sans-serif;
@@ -335,14 +395,14 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         }
         
         .theme-option input[type="radio"]:checked + .theme-preview {
-            border-color: var(--red);
+            border-color: var(--accent);
             transform: scale(1.05);
-            box-shadow: 0 0 30px rgba(229, 9, 20, 0.3);
+            box-shadow: 0 0 30px var(--accent-glow);
         }
         
         .preview-dark {
             background: linear-gradient(135deg, #0a0a0a, #1a1a1a);
-            border: 2px solid var(--red);
+            border: 2px solid #e50914;
             position: relative;
             overflow: hidden;
         }
@@ -359,7 +419,7 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         
         .preview-light {
             background: linear-gradient(135deg, #fff, #e0e0e0);
-            border: 2px solid var(--red);
+            border: 2px solid #e50914;
             position: relative;
             overflow: hidden;
         }
@@ -376,7 +436,7 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         
         .preview-neon {
             background: linear-gradient(135deg, #ff00ff, #00ffff);
-            border: 2px solid var(--red);
+            border: 2px solid #ff00ff;
             position: relative;
             overflow: hidden;
         }
@@ -394,7 +454,7 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         
         .preview-matrix {
             background: linear-gradient(135deg, #00ff00, #003300);
-            border: 2px solid var(--red);
+            border: 2px solid #00ff00;
             position: relative;
             overflow: hidden;
         }
@@ -432,21 +492,21 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         }
         
         .form-group label:hover {
-            background: rgba(229, 9, 20, 0.05);
+            background: rgba(var(--accent), 0.05);
         }
         
         .form-group input[type="checkbox"] {
             width: 20px;
             height: 20px;
             cursor: pointer;
-            accent-color: var(--red);
+            accent-color: var(--accent);
         }
         
         .form-group input[type="password"] {
             width: 100%;
             padding: 14px 18px;
             background: rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(229, 9, 20, 0.2);
+            border: 1px solid var(--border-color);
             color: var(--text-primary);
             border-radius: 40px;
             transition: all 0.3s;
@@ -455,9 +515,9 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         }
         
         .form-group input[type="password"]:focus {
-            border-color: var(--red);
+            border-color: var(--accent);
             outline: none;
-            box-shadow: 0 0 20px rgba(229, 9, 20, 0.2);
+            box-shadow: 0 0 20px var(--accent-glow);
         }
         
         .form-group small {
@@ -470,8 +530,8 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         
         /* Buttons */
         .btn-primary {
-            background: var(--red);
-            color: #fff;
+            background: var(--accent);
+            color: var(--bg-primary);
             border: none;
             font-family: 'Montserrat', sans-serif;
             font-weight: 600;
@@ -481,7 +541,7 @@ $current_theme = $user['theme_preference'] ?? 'dark';
             padding: 14px 30px;
             border-radius: 40px;
             transition: all 0.3s;
-            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
+            box-shadow: 0 5px 20px var(--accent-glow);
             cursor: pointer;
             position: relative;
             overflow: hidden;
@@ -501,9 +561,9 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         }
         
         .btn-primary:hover {
-            background: var(--red-dark);
+            background: var(--accent-dark);
             transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(229, 9, 20, 0.4);
+            box-shadow: 0 8px 30px var(--accent-glow);
         }
         
         .btn-primary:hover::before {
@@ -512,7 +572,7 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         
         .btn-secondary {
             background: transparent;
-            border: 1px solid rgba(229, 9, 20, 0.3);
+            border: 1px solid var(--border-color);
             color: var(--text-primary);
             padding: 12px 25px;
             border-radius: 40px;
@@ -523,8 +583,8 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         }
         
         .btn-secondary:hover {
-            border-color: var(--red);
-            color: var(--red);
+            border-color: var(--accent);
+            color: var(--accent);
             transform: translateY(-2px);
         }
         
@@ -582,19 +642,56 @@ $current_theme = $user['theme_preference'] ?? 'dark';
             content: '🎬';
             position: absolute;
             left: 0;
-            color: var(--red);
+            color: var(--accent);
         }
         
         /* Cinema Strip Divider */
         .cinema-strip {
             height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
             margin: 20px 0 30px;
             opacity: 0.3;
         }
         
+        /* Alerts */
+        .alert {
+            padding: 18px 25px;
+            margin-bottom: 20px;
+            border-radius: 40px;
+            animation: slideIn 0.3s ease;
+            border-left: 4px solid var(--accent);
+            font-weight: 400;
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
         /* Responsive */
+        @media (max-width: 1200px) {
+            .nav-links a {
+                padding: 5px 8px;
+                font-size: 0.7rem;
+            }
+        }
+        
         @media (max-width: 1024px) {
+            .nav-container {
+                padding: 0 15px;
+            }
+            
             .settings-container {
                 grid-template-columns: 1fr;
             }
@@ -605,8 +702,13 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         }
         
         @media (max-width: 768px) {
+            .nav-container {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
             .nav-links {
-                display: none;
+                justify-content: center;
             }
             
             h1 {
@@ -630,12 +732,17 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         <div class="nav-container">
             <a href="../index.php" class="logo">CINEMA TICKET</a>
             <div class="nav-links">
-                <a href="movies.php">Movies</a>
+                <a href="movies.php" class="active">Movies</a>
                 <a href="favorites.php">Favorites</a>
                 <a href="history.php">History</a>
                 <a href="purchases.php">My Tickets</a>
                 <a href="profile.php">Profile</a>
-                <a href="settings.php" class="active">Settings</a>
+                <a href="settings.php">Settings</a>
+                <div class="profile-badge">
+                    <span>👤</span>
+                    <span class="profile-name"><?php echo htmlspecialchars($_SESSION['profile_name'] ?? 'Profile'); ?></span>
+                    <a href="select_profile.php" class="profile-switch">Switch</a>
+                </div>
                 <a href="../auth/logout.php">Logout</a>
             </div>
         </div>
@@ -646,6 +753,16 @@ $current_theme = $user['theme_preference'] ?? 'dark';
         
         <!-- Cinema Strip Divider -->
         <div class="cinema-strip"></div>
+        
+        <!-- FIXED: Correct flash message display -->
+        <?php if (isset($_SESSION['flash'])): ?>
+            <div class="alert alert-<?php echo $_SESSION['flash']['type']; ?>">
+                <?php 
+                echo htmlspecialchars($_SESSION['flash']['message']);
+                unset($_SESSION['flash']);
+                ?>
+            </div>
+        <?php endif; ?>
         
         <div class="settings-container">
             <!-- Sidebar -->
@@ -790,7 +907,7 @@ $current_theme = $user['theme_preference'] ?? 'dark';
                     </form>
                     
                     <div style="margin-top:30px;">
-                        <h3 style="color: var(--red);">Two-Factor Authentication</h3>
+                        <h3 style="color: var(--accent);">Two-Factor Authentication</h3>
                         <p style="color: var(--text-secondary);">Add an extra layer of security to your account</p>
                         <button class="btn-secondary">Enable 2FA</button>
                     </div>
@@ -799,10 +916,10 @@ $current_theme = $user['theme_preference'] ?? 'dark';
                 <!-- About Section -->
                 <div id="about" class="settings-section">
                     <h2>About CinemaTicket</h2>
-                    <p style="color: var(--text-secondary);">Version 2.0.0</p>
-                    <p style="color: #fff; margin-bottom: 20px;">Your premier destination for movie tickets - Watch in cinema or online</p>
+                    <p style="color: var(--text-secondary);"
+                                        </div>
                     
-                    <h3 style="color: var(--red); margin-top: 30px;">Features</h3>
+                    <h3 style="color: var(--accent); margin-top: 30px;">Features</h3>
                     <ul class="feature-list">
                         <li>Wide movie selection with age-based filtering</li>
                         <li>Easy ticket purchase with seat selection</li>
@@ -813,9 +930,9 @@ $current_theme = $user['theme_preference'] ?? 'dark';
                         <li>Online streaming with view limits</li>
                     </ul>
                     
-                    <h3 style="color: var(--red); margin-top: 30px;">Contact</h3>
-                    <p style="color: #fff;">📧 support@cinematicket.com</p>
-                    <p style="color: #fff;">📱 +63 (912) 345-6789</p>
+                    <h3 style="color: var(--accent); margin-top: 30px;">Contact</h3>
+                    <p style="color: var(--text-primary);">📧 support@cinematicket.com</p>
+                    <p style="color: var(--text-primary);">📱 +63 (912) 345-6789</p>
                 </div>
             </div>
         </div>
@@ -834,7 +951,21 @@ $current_theme = $user['theme_preference'] ?? 'dark';
                 link.classList.remove('active');
             });
             event.target.classList.add('active');
+            
+            // Update URL hash without scrolling
+            history.pushState(null, null, '#' + sectionId);
         }
+
+        // Check URL hash on page load
+        window.addEventListener('load', function() {
+            if (window.location.hash) {
+                const sectionId = window.location.hash.substring(1);
+                const link = document.querySelector(`.settings-menu a[href="#${sectionId}"]`);
+                if (link) {
+                    link.click();
+                }
+            }
+        });
     </script>
     
     <script src="../assets/js/script.js"></script>

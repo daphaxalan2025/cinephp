@@ -1,6 +1,6 @@
 <?php
 // admin/screenings.php - COMPLETELY FIXED
-// SQL concatenation removed - using prepared statements only
+// Price is now READ-ONLY - always uses movie price to avoid inconsistencies
 require_once '../includes/functions.php';
 requireAdmin();
 
@@ -42,9 +42,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $screen_number = intval($_POST['screen_number'] ?? 0);
     $show_date = $_POST['show_date'] ?? '';
     $show_time = $_POST['show_time'] ?? '';
-    $price = floatval($_POST['price'] ?? 0);
-    $available_seats = intval($_POST['available_seats'] ?? 40);
     $screening_id = $_POST['screening_id'] ?? '';
+    
+    // Get the movie price from database (don't trust POST data)
+    $stmt = $pdo->prepare("SELECT price, release_date, title FROM movies WHERE id = ?");
+    $stmt->execute([$movie_id]);
+    $movie_data = $stmt->fetch();
+    
+    if (!$movie_data) {
+        setFlash('Invalid movie selected', 'error');
+        header('Location: screenings.php');
+        exit;
+    }
+    
+    $price = floatval($movie_data['price']); // Force movie price
+    $available_seats = intval($_POST['available_seats'] ?? 40);
     
     // Validation
     if (empty($movie_id)) $errors[] = 'Movie is required';
@@ -56,19 +68,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if ($available_seats < 1 || $available_seats > 500) $errors[] = 'Available seats must be between 1 and 500';
     
     // 3-month release date validation
-    if (empty($errors)) {
-        $stmt = $pdo->prepare("SELECT release_date, title FROM movies WHERE id = ?");
-        $stmt->execute([$movie_id]);
-        $movie_data = $stmt->fetch();
-        
-        if ($movie_data && $movie_data['release_date']) {
-            $cutoff = date('Y-m-d', strtotime($movie_data['release_date'] . ' +3 months'));
-            if ($show_date > $cutoff) {
-                $errors[] = 'Cannot schedule a screening more than 3 months after the release date. Release date: ' . $movie_data['release_date'] . ' | Cutoff: ' . $cutoff;
-            }
-            if ($show_date < $movie_data['release_date']) {
-                $errors[] = 'Screening date cannot be before the movie release date (' . $movie_data['release_date'] . ')';
-            }
+    if (empty($errors) && $movie_data['release_date']) {
+        $cutoff = date('Y-m-d', strtotime($movie_data['release_date'] . ' +3 months'));
+        if ($show_date > $cutoff) {
+            $errors[] = 'Cannot schedule a screening more than 3 months after the release date. Release date: ' . $movie_data['release_date'] . ' | Cutoff: ' . $cutoff;
+        }
+        if ($show_date < $movie_data['release_date']) {
+            $errors[] = 'Screening date cannot be before the movie release date (' . $movie_data['release_date'] . ')';
         }
     }
     
@@ -119,7 +125,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $result = $stmt->execute([$movie_id, $cinema_id, $screen_number, $show_date, $show_time, $price, $available_seats, $status]);
                 
                 if ($result) {
-                    $newId = $pdo->lastInsertId();
                     setFlash("Screening added successfully", 'success');
                 } else {
                     setFlash('Failed to add screening', 'error');
@@ -177,7 +182,6 @@ $show_form = (isset($_GET['action']) && $_GET['action'] == 'add') || isset($_GET
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        /* Same styles as staff version - keeping consistent */
         :root {
             --black: #0a0a0a;
             --deep-gray: #1a1a1a;
@@ -471,6 +475,7 @@ $show_form = (isset($_GET['action']) && $_GET['action'] == 'add') || isset($_GET
         .form-group input:read-only {
             background: rgba(10, 10, 10, 0.3);
             cursor: not-allowed;
+            color: var(--text-secondary);
         }
         
         .form-row {
@@ -485,6 +490,16 @@ $show_form = (isset($_GET['action']) && $_GET['action'] == 'add') || isset($_GET
             color: var(--text-secondary);
             margin-top: 5px;
             padding-left: 15px;
+        }
+        
+        .price-notice {
+            background: rgba(229, 9, 20, 0.1);
+            border-radius: 20px;
+            padding: 6px 12px;
+            font-size: 0.7rem;
+            color: #ff8844;
+            display: inline-block;
+            margin-top: 8px;
         }
         
         .btn-primary {
@@ -812,8 +827,7 @@ $show_form = (isset($_GET['action']) && $_GET['action'] == 'add') || isset($_GET
                                 <label>💰 Price (₱)</label>
                                 <input type="number" name="price" id="priceInput" step="0.01" 
                                        value="<?php echo $edit_screening['price'] ?? ''; ?>" 
-                                       required placeholder="Auto-fills from movie">
-                                <small class="form-text">Auto-fills when you select a movie</small>
+                                       required placeholder="Auto-fills from movie" readonly>
                             </div>
                         </div>
                         
@@ -993,13 +1007,18 @@ $show_form = (isset($_GET['action']) && $_GET['action'] == 'add') || isset($_GET
         
         function updatePriceFromMovie() {
             if (movieSelect && priceInput && movieSelect.value) {
-                priceInput.value = parseFloat(movieSelect.options[movieSelect.selectedIndex].getAttribute('data-price')).toFixed(2);
+                const selectedOption = movieSelect.options[movieSelect.selectedIndex];
+                const moviePrice = selectedOption.getAttribute('data-price');
+                if (moviePrice) {
+                    priceInput.value = parseFloat(moviePrice).toFixed(2);
+                }
             }
         }
         
         function checkReleaseDate() {
             if (movieSelect && movieSelect.value && showDateInput && showDateInput.value) {
-                const releaseDate = movieSelect.options[movieSelect.selectedIndex].getAttribute('data-release');
+                const selectedOption = movieSelect.options[movieSelect.selectedIndex];
+                const releaseDate = selectedOption.getAttribute('data-release');
                 const showDate = showDateInput.value;
                 
                 if (releaseDate && showDate) {
@@ -1077,6 +1096,10 @@ $show_form = (isset($_GET['action']) && $_GET['action'] == 'add') || isset($_GET
             if (cinemaSelect) {
                 cinemaSelect.value = '<?php echo $edit_screening['cinema_id']; ?>';
                 updateScreenOptions();
+            }
+            if (movieSelect && movieSelect.value) {
+                updatePriceFromMovie();
+                checkReleaseDate();
             }
         });
         <?php endif; ?>

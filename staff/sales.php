@@ -1,14 +1,23 @@
 <?php
-// staff/sales.php - COMPLETELY FIXED
-// SQL concatenation removed - using prepared statements only
+// staff/sales.php - PROFESSIONAL DESIGN MATCHING CINEMAS PAGE
 require_once '../includes/functions.php';
 requireStaff();
 
 $pdo = getDB();
 $user = getCurrentUser();
 
-// Get staff's cinema (if assigned)
-$cinema_id = $user['cinema_id'] ?? 0;
+// Get staff's assigned cinema from staff_cinemas table
+$staff_cinema = getStaffCinema($user['id']);
+$cinema_id = $staff_cinema ? $staff_cinema['id'] : 0;
+
+// Get cinema name for badge
+$cinema_name = '';
+if ($cinema_id) {
+    $stmt = $pdo->prepare("SELECT name FROM cinemas WHERE id = ?");
+    $stmt->execute([$cinema_id]);
+    $cinema = $stmt->fetch();
+    $cinema_name = $cinema['name'] ?? '';
+}
 
 // Get date range
 $date_from = $_GET['from'] ?? date('Y-m-d', strtotime('-30 days'));
@@ -25,7 +34,6 @@ if (isset($_GET['export'])) {
     $output = fopen('php://output', 'w');
     
     if ($export_type == 'daily') {
-        // Build query with prepared statements
         $sql = "
             SELECT 
                 DATE(t.purchase_date) as sale_date,
@@ -134,7 +142,7 @@ if (isset($_GET['export'])) {
 
 // ========== REGULAR REPORT DISPLAY ==========
 
-// Get sales by day - USING PREPARED STATEMENTS
+// Get sales by day
 $sql = "
     SELECT 
         DATE(t.purchase_date) as sale_date,
@@ -159,7 +167,7 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $daily_sales = $stmt->fetchAll();
 
-// Get sales by movie - USING PREPARED STATEMENTS
+// Get sales by movie
 $sql = "
     SELECT 
         m.title,
@@ -185,7 +193,7 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $movie_sales = $stmt->fetchAll();
 
-// Get sales by payment method - USING PREPARED STATEMENTS
+// Get sales by payment method
 $sql = "
     SELECT 
         p.payment_method,
@@ -210,7 +218,7 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $payment_methods = $stmt->fetchAll();
 
-// Get hourly breakdown for today - USING PREPARED STATEMENTS
+// Get hourly breakdown for today
 $sql = "
     SELECT 
         HOUR(t.purchase_date) as hour,
@@ -249,7 +257,6 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        /* All existing styles remain the same - keeping for brevity */
         :root {
             --black: #0a0a0a;
             --deep-gray: #1a1a1a;
@@ -268,11 +275,7 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             --warning-color: #ffff44;
         }
         
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
             background: var(--black);
@@ -297,37 +300,38 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             z-index: -1;
         }
         
-        /* Navigation */
+        /* NAVBAR - MATCHING CINEMAS PAGE */
         .navbar {
             background: rgba(10, 10, 10, 0.95);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
+            padding: 0.8rem 0;
             position: sticky;
             top: 0;
             z-index: 1000;
         }
         
         .nav-container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 20px;
         }
         
         .logo {
             color: var(--red);
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             font-weight: 800;
             font-family: 'Montserrat', sans-serif;
             text-decoration: none;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 1.5px;
             position: relative;
             transition: all 0.3s;
+            white-space: nowrap;
         }
         
         .logo:hover {
@@ -336,28 +340,31 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
         
         .logo::before {
             content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
+            margin-right: 8px;
+            font-size: 1.2rem;
             filter: drop-shadow(0 0 5px var(--red));
         }
         
         .nav-links {
             display: flex;
-            gap: 25px;
+            gap: 5px;
             align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
         }
         
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             transition: all 0.3s;
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             position: relative;
+            white-space: nowrap;
         }
         
         .nav-links a::after {
@@ -388,13 +395,15 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             width: 60%;
         }
         
+        /* MAIN CONTAINER - MATCHING CINEMAS PAGE */
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
-            padding: 30px;
+            padding: 30px 20px;
         }
         
-        .report-header {
+        /* HEADER SECTION - MATCHING CINEMAS PAGE */
+        .header-section {
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -404,7 +413,7 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
         }
         
         h1 {
-            font-size: 2.5rem;
+            font-size: 2.8rem;
             font-weight: 800;
             background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
             -webkit-background-clip: text;
@@ -412,7 +421,6 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             background-clip: text;
             margin: 0;
             text-transform: uppercase;
-            letter-spacing: 2px;
         }
         
         .cinema-badge {
@@ -425,10 +433,18 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
         }
         
+        /* CINEMA STRIP - MATCHING CINEMAS PAGE */
+        .cinema-strip {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            margin: 30px 0;
+            opacity: 0.5;
+        }
+        
+        /* DATE FILTER */
         .date-filter {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.2);
             border-radius: 24px;
             padding: 30px;
@@ -471,20 +487,19 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 1px;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             margin-bottom: 8px;
             display: block;
         }
         
         .filter-group input {
             width: 100%;
-            padding: 14px 18px;
+            padding: 12px 16px;
             background: rgba(0, 0, 0, 0.3);
             border: 1px solid rgba(229, 9, 20, 0.2);
             color: var(--text-primary);
             border-radius: 40px;
             transition: all 0.3s;
-            font-family: 'Inter', sans-serif;
         }
         
         .filter-group input:focus {
@@ -497,41 +512,22 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             background: var(--red);
             color: #fff;
             border: none;
-            font-family: 'Montserrat', sans-serif;
             font-weight: 600;
-            letter-spacing: 1px;
             text-transform: uppercase;
-            font-size: 0.9rem;
-            padding: 14px 30px;
+            font-size: 0.85rem;
+            padding: 12px 28px;
             border-radius: 40px;
             transition: all 0.3s;
-            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
             cursor: pointer;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .btn-primary::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s;
         }
         
         .btn-primary:hover {
             background: var(--red-dark);
-            transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(229, 9, 20, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
         }
         
-        .btn-primary:hover::before {
-            left: 100%;
-        }
-        
+        /* STATS GRID */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -542,10 +538,9 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
         .stat-card {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.1);
             border-radius: 16px;
-            padding: 25px;
+            padding: 22px;
             text-align: center;
             transition: all 0.3s;
             position: relative;
@@ -565,13 +560,13 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
         }
         
         .stat-card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-3px);
             border-color: rgba(229, 9, 20, 0.3);
-            box-shadow: 0 20px 40px rgba(229, 9, 20, 0.15);
+            box-shadow: 0 15px 35px rgba(229, 9, 20, 0.12);
         }
         
         .stat-value {
-            font-size: 2.2rem;
+            font-size: 1.8rem;
             font-weight: 700;
             color: var(--red);
             font-family: 'Montserrat', sans-serif;
@@ -580,18 +575,18 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
         
         .stat-label {
             color: var(--text-secondary);
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 1px;
         }
         
+        /* CHART CONTAINER */
         .chart-container {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.2);
-            border-radius: 24px;
-            padding: 30px;
+            border-radius: 20px;
+            padding: 25px;
             margin: 30px 0;
             position: relative;
             overflow: hidden;
@@ -611,15 +606,24 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
         .chart-container h2 {
             color: var(--red);
             margin-bottom: 20px;
-            font-size: 1.5rem;
+            font-size: 1.3rem;
+        }
+        
+        /* SECTION HEADER WITH EXPORT */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            margin: 40px 0 20px;
         }
         
         .section-title {
             color: var(--red);
-            margin: 40px 0 20px;
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             position: relative;
             padding-bottom: 10px;
+            margin: 0;
         }
         
         .section-title::after {
@@ -627,18 +631,38 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             position: absolute;
             bottom: 0;
             left: 0;
-            width: 80px;
+            width: 60px;
             height: 3px;
             background: var(--red);
             border-radius: 3px;
         }
         
+        .export-btn {
+            background: transparent;
+            border: 1px solid var(--red);
+            color: var(--red);
+            padding: 8px 16px;
+            border-radius: 30px;
+            font-size: 0.75rem;
+            text-decoration: none;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .export-btn:hover {
+            background: var(--red);
+            color: #fff;
+            transform: translateY(-2px);
+        }
+        
+        /* SALES TABLE */
         .sales-table {
             width: 100%;
             border-collapse: collapse;
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.1);
             border-radius: 16px;
             overflow: hidden;
@@ -647,18 +671,19 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
         .sales-table th {
             background: rgba(229, 9, 20, 0.15);
             color: var(--red);
-            padding: 18px 15px;
+            padding: 15px 15px;
             text-align: left;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 1px;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
         }
         
         .sales-table td {
-            padding: 15px;
+            padding: 12px 15px;
             border-bottom: 1px solid rgba(229, 9, 20, 0.1);
             color: var(--text-secondary);
+            font-size: 0.85rem;
         }
         
         .sales-table tr:hover {
@@ -669,81 +694,52 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
             border-bottom: none;
         }
         
-        .sales-table td strong {
-            color: var(--red);
-        }
-        
         .highlight-number {
             color: var(--red);
             font-weight: 600;
         }
         
-        .cinema-strip {
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
-            margin: 20px 0 30px;
-            opacity: 0.3;
-        }
-        
-        .export-btn {
-            background: transparent;
-            border: 1px solid var(--red);
-            color: var(--red);
-            padding: 6px 12px;
-            border-radius: 30px;
-            font-size: 0.75rem;
-            text-decoration: none;
-            transition: all 0.3s;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            margin-left: 15px;
-        }
-        
-        .export-btn:hover {
-            background: var(--red);
-            color: #fff;
-            transform: translateY(-2px);
-        }
-        
-        .section-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            margin: 40px 0 20px;
-        }
-        
-        .section-header h2 {
-            margin: 0;
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            background: var(--card-gradient);
+            border-radius: 16px;
+            border: 1px solid rgba(229,9,20,0.1);
+            color: var(--text-secondary);
         }
         
         @media (max-width: 768px) {
-            .nav-links {
-                display: none;
+            .nav-container {
+                flex-direction: column;
+                gap: 10px;
             }
-            
+            .nav-links {
+                justify-content: center;
+            }
             h1 {
                 font-size: 2rem;
             }
-            
+            .header-section {
+                flex-direction: column;
+                align-items: flex-start;
+            }
             .filter-form {
                 flex-direction: column;
             }
-            
             .filter-group {
                 width: 100%;
             }
-            
             .sales-table {
                 overflow-x: auto;
                 display: block;
             }
-            
             .section-header {
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 10px;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -766,16 +762,11 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
     </nav>
     
     <main class="container">
-        <div class="report-header">
+        <div class="header-section">
             <h1>Sales Report</h1>
-            <?php if ($cinema_id): ?>
+            <?php if ($cinema_name): ?>
                 <div class="cinema-badge">
-                    <?php 
-                    $stmt = $pdo->prepare("SELECT name FROM cinemas WHERE id = ?");
-                    $stmt->execute([$cinema_id]);
-                    $cinema = $stmt->fetch();
-                    echo htmlspecialchars($cinema['name'] ?? 'Your Cinema');
-                    ?>
+                    🏛️ <?php echo htmlspecialchars($cinema_name); ?>
                 </div>
             <?php endif; ?>
         </div>
@@ -826,98 +817,98 @@ $avg_daily = count($daily_sales) > 0 ? $total_revenue / count($daily_sales) : 0;
         
         <!-- Daily Breakdown Section -->
         <div class="section-header">
-            <h2 class="section-title" style="margin:0;">Daily Breakdown</h2>
+            <h2 class="section-title">Daily Breakdown</h2>
             <a href="?export=daily&from=<?php echo $date_from; ?>&to=<?php echo $date_to; ?>" class="export-btn">📥 Export CSV</a>
         </div>
-        <table class="sales-table">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Tickets Sold</th>
-                    <th>Unique Customers</th>
-                    <th>Revenue</th>
-                    <th>Average per Ticket</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($daily_sales as $day): ?>
+        
+        <?php if (empty($daily_sales)): ?>
+            <div class="empty-state">No sales data for selected period</div>
+        <?php else: ?>
+            <table class="sales-table">
+                <thead>
                     <tr>
-                        <td><?php echo date('M d, Y', strtotime($day['sale_date'])); ?></td>
-                        <td><span class="highlight-number"><?php echo $day['ticket_count']; ?></span></td>
-                        <td><?php echo $day['unique_customers']; ?></td>
-                        <td><span class="highlight-number">₱<?php echo number_format($day['daily_revenue'], 2); ?></span></td>
-                        <td>₱<?php echo number_format($day['daily_revenue'] / $day['ticket_count'], 2); ?></td>
+                        <th>Date</th>
+                        <th>Tickets Sold</th>
+                        <th>Unique Customers</th>
+                        <th>Revenue</th>
+                        <th>Average per Ticket</th>
                     </tr>
-                <?php endforeach; ?>
-                <?php if (empty($daily_sales)): ?>
-                    <tr>
-                        <td colspan="5" style="text-align:center; padding:30px; color:var(--text-secondary);">No sales data for selected period</td>
-                    </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    <?php foreach ($daily_sales as $day): ?>
+                        <tr>
+                            <td><?php echo date('M d, Y', strtotime($day['sale_date'])); ?></td>
+                            <td><span class="highlight-number"><?php echo $day['ticket_count']; ?></span></td>
+                            <td><?php echo $day['unique_customers']; ?></td>
+                            <td><span class="highlight-number">₱<?php echo number_format($day['daily_revenue'], 2); ?></span></td>
+                            <td>₱<?php echo number_format($day['daily_revenue'] / $day['ticket_count'], 2); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
         
         <!-- Top Movies Section -->
         <div class="section-header">
-            <h2 class="section-title" style="margin:0;">Top Movies</h2>
+            <h2 class="section-title">Top Movies</h2>
             <a href="?export=movies&from=<?php echo $date_from; ?>&to=<?php echo $date_to; ?>" class="export-btn">📥 Export CSV</a>
         </div>
-        <table class="sales-table">
-            <thead>
-                <tr>
-                    <th>Movie</th>
-                    <th>Tickets Sold</th>
-                    <th>Revenue</th>
-                    <th>Average Price</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($movie_sales as $movie): ?>
+        
+        <?php if (empty($movie_sales)): ?>
+            <div class="empty-state">No movie sales data</div>
+        <?php else: ?>
+            <table class="sales-table">
+                <thead>
                     <tr>
-                        <td><strong><?php echo htmlspecialchars($movie['title']); ?></strong></td>
-                        <td><span class="highlight-number"><?php echo $movie['ticket_count']; ?></span></td>
-                        <td><span class="highlight-number">₱<?php echo number_format($movie['revenue'], 2); ?></span></td>
-                        <td>₱<?php echo number_format($movie['avg_ticket_price'], 2); ?></td>
+                        <th>Movie</th>
+                        <th>Tickets Sold</th>
+                        <th>Revenue</th>
+                        <th>Average Price</th>
                     </tr>
-                <?php endforeach; ?>
-                <?php if (empty($movie_sales)): ?>
-                    <tr>
-                        <td colspan="4" style="text-align:center; padding:30px; color:var(--text-secondary);">No movie sales data</td>
-                    </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    <?php foreach ($movie_sales as $movie): ?>
+                        <tr>
+                            <td><strong><?php echo htmlspecialchars($movie['title']); ?></strong></td>
+                            <td><span class="highlight-number"><?php echo $movie['ticket_count']; ?></span></td>
+                            <td><span class="highlight-number">₱<?php echo number_format($movie['revenue'], 2); ?></span></td>
+                            <td>₱<?php echo number_format($movie['avg_ticket_price'], 2); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
         
         <!-- Payment Methods Section -->
         <div class="section-header">
-            <h2 class="section-title" style="margin:0;">Payment Methods</h2>
+            <h2 class="section-title">Payment Methods</h2>
             <a href="?export=payments&from=<?php echo $date_from; ?>&to=<?php echo $date_to; ?>" class="export-btn">📥 Export CSV</a>
         </div>
-        <table class="sales-table">
-            <thead>
-                <tr>
-                    <th>Payment Method</th>
-                    <th>Transactions</th>
-                    <th>Total Amount</th>
-                    <th>Average</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($payment_methods as $method): ?>
+        
+        <?php if (empty($payment_methods)): ?>
+            <div class="empty-state">No payment data</div>
+        <?php else: ?>
+            <table class="sales-table">
+                <thead>
                     <tr>
-                        <td><?php echo ucfirst(str_replace('_', ' ', $method['payment_method'])); ?></td>
-                        <td><span class="highlight-number"><?php echo $method['transaction_count']; ?></span></td>
-                        <td><span class="highlight-number">₱<?php echo number_format($method['total_amount'], 2); ?></span></td>
-                        <td>₱<?php echo number_format($method['total_amount'] / $method['transaction_count'], 2); ?></td>
+                        <th>Payment Method</th>
+                        <th>Transactions</th>
+                        <th>Total Amount</th>
+                        <th>Average</th>
                     </tr>
-                <?php endforeach; ?>
-                <?php if (empty($payment_methods)): ?>
-                    <tr>
-                        <td colspan="4" style="text-align:center; padding:30px; color:var(--text-secondary);">No payment data</td>
-                    </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    <?php foreach ($payment_methods as $method): ?>
+                        <tr>
+                            <td><?php echo ucfirst(str_replace('_', ' ', $method['payment_method'])); ?></td>
+                            <td><span class="highlight-number"><?php echo $method['transaction_count']; ?></span></td>
+                            <td><span class="highlight-number">₱<?php echo number_format($method['total_amount'], 2); ?></span></td>
+                            <td>₱<?php echo number_format($method['total_amount'] / $method['transaction_count'], 2); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
     </main>
     
     <script>

@@ -1,5 +1,5 @@
 <?php
-// staff/tickets_list.php - FIXED: PHP Peso currency
+// staff/tickets_list.php - PROFESSIONAL DESIGN MATCHING CINEMAS PAGE
 require_once '../includes/functions.php';
 requireStaff();
 
@@ -66,11 +66,7 @@ $paid_tickets = $total_tickets - $used_tickets;
             --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
         }
         
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
             background: var(--black);
@@ -95,37 +91,38 @@ $paid_tickets = $total_tickets - $used_tickets;
             z-index: -1;
         }
         
-        /* Navigation */
+        /* NAVBAR - MATCHING CINEMAS PAGE */
         .navbar {
             background: rgba(10, 10, 10, 0.95);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
+            padding: 0.8rem 0;
             position: sticky;
             top: 0;
             z-index: 1000;
         }
         
         .nav-container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 20px;
         }
         
         .logo {
             color: var(--red);
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             font-weight: 800;
             font-family: 'Montserrat', sans-serif;
             text-decoration: none;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 1.5px;
             position: relative;
             transition: all 0.3s;
+            white-space: nowrap;
         }
         
         .logo:hover {
@@ -134,28 +131,31 @@ $paid_tickets = $total_tickets - $used_tickets;
         
         .logo::before {
             content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
+            margin-right: 8px;
+            font-size: 1.2rem;
             filter: drop-shadow(0 0 5px var(--red));
         }
         
         .nav-links {
             display: flex;
-            gap: 25px;
+            gap: 5px;
             align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
         }
         
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             transition: all 0.3s;
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             position: relative;
+            white-space: nowrap;
         }
         
         .nav-links a::after {
@@ -186,15 +186,25 @@ $paid_tickets = $total_tickets - $used_tickets;
             width: 60%;
         }
         
-        /* Main Container */
+        /* MAIN CONTAINER - MATCHING CINEMAS PAGE */
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
-            padding: 30px;
+            padding: 30px 20px;
+        }
+        
+        /* HEADER SECTION - MATCHING CINEMAS PAGE */
+        .header-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            gap: 20px;
         }
         
         h1 {
-            font-size: 2.5rem;
+            font-size: 2.8rem;
             font-weight: 800;
             background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
             -webkit-background-clip: text;
@@ -202,16 +212,14 @@ $paid_tickets = $total_tickets - $used_tickets;
             background-clip: text;
             margin: 0;
             text-transform: uppercase;
-            letter-spacing: 2px;
         }
         
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            flex-wrap: wrap;
-            gap: 20px;
+        /* CINEMA STRIP - MATCHING CINEMAS PAGE */
+        .cinema-strip {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            margin: 30px 0;
+            opacity: 0.5;
         }
         
         .header-actions {
@@ -224,12 +232,12 @@ $paid_tickets = $total_tickets - $used_tickets;
             background: transparent;
             border: 1px solid rgba(229, 9, 20, 0.3);
             color: var(--text-primary);
-            padding: 12px 25px;
+            padding: 10px 22px;
             border-radius: 40px;
             cursor: pointer;
             font-weight: 600;
             transition: all 0.3s;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             text-transform: uppercase;
             letter-spacing: 1px;
         }
@@ -244,12 +252,12 @@ $paid_tickets = $total_tickets - $used_tickets;
             background: transparent;
             border: 1px solid rgba(229, 9, 20, 0.3);
             color: var(--text-primary);
-            padding: 12px 25px;
+            padding: 10px 22px;
             border-radius: 40px;
             cursor: pointer;
             font-weight: 600;
             transition: all 0.3s;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             text-transform: uppercase;
             letter-spacing: 1px;
         }
@@ -264,12 +272,12 @@ $paid_tickets = $total_tickets - $used_tickets;
             background: transparent;
             border: 1px solid rgba(229, 9, 20, 0.3);
             color: var(--text-primary);
-            padding: 12px 25px;
+            padding: 10px 22px;
             border-radius: 40px;
             text-decoration: none;
             font-weight: 600;
             transition: all 0.3s;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             text-transform: uppercase;
             letter-spacing: 1px;
             display: inline-block;
@@ -281,17 +289,16 @@ $paid_tickets = $total_tickets - $used_tickets;
             background: rgba(229, 9, 20, 0.1);
         }
         
-        /* Screening Info */
+        /* SCREENING INFO */
         .screening-info {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.2);
             border-radius: 24px;
             padding: 25px;
             margin-bottom: 30px;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
             gap: 20px;
             position: relative;
             overflow: hidden;
@@ -320,7 +327,7 @@ $paid_tickets = $total_tickets - $used_tickets;
         
         .info-label {
             color: var(--text-secondary);
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             margin-bottom: 5px;
             text-transform: uppercase;
             letter-spacing: 1px;
@@ -328,15 +335,15 @@ $paid_tickets = $total_tickets - $used_tickets;
         
         .info-value {
             color: var(--red);
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             font-weight: 700;
             font-family: 'Montserrat', sans-serif;
         }
         
-        /* Stats Grid */
+        /* STATS GRID */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
@@ -344,7 +351,6 @@ $paid_tickets = $total_tickets - $used_tickets;
         .stat-card {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.1);
             border-radius: 16px;
             padding: 20px;
@@ -367,13 +373,13 @@ $paid_tickets = $total_tickets - $used_tickets;
         }
         
         .stat-card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-3px);
             border-color: rgba(229, 9, 20, 0.3);
-            box-shadow: 0 20px 40px rgba(229, 9, 20, 0.15);
+            box-shadow: 0 15px 35px rgba(229, 9, 20, 0.12);
         }
         
         .stat-number {
-            font-size: 2.2rem;
+            font-size: 1.8rem;
             font-weight: 700;
             color: var(--red);
             font-family: 'Montserrat', sans-serif;
@@ -382,43 +388,41 @@ $paid_tickets = $total_tickets - $used_tickets;
         
         .stat-label {
             color: var(--text-secondary);
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             text-transform: uppercase;
             letter-spacing: 1px;
         }
         
-        /* Tickets Table */
+        /* TICKETS TABLE */
         .table-container {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.1);
-            border-radius: 24px;
+            border-radius: 20px;
             overflow: hidden;
             margin-top: 30px;
-            padding: 5px;
         }
         
         .tickets-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
         }
         
         .tickets-table th {
             background: rgba(229, 9, 20, 0.15);
             color: var(--red);
-            padding: 18px 15px;
+            padding: 15px 12px;
             text-align: left;
             font-weight: 600;
             font-family: 'Montserrat', sans-serif;
             text-transform: uppercase;
             letter-spacing: 1px;
-            font-size: 0.8rem;
+            font-size: 0.7rem;
         }
         
         .tickets-table td {
-            padding: 15px;
+            padding: 12px;
             border-bottom: 1px solid rgba(229, 9, 20, 0.1);
             color: var(--text-secondary);
         }
@@ -437,14 +441,14 @@ $paid_tickets = $total_tickets - $used_tickets;
             padding: 4px 10px;
             border-radius: 30px;
             font-family: 'Monaco', monospace;
-            font-size: 0.85rem;
+            font-size: 0.75rem;
         }
         
         .status-badge {
             display: inline-block;
-            padding: 4px 12px;
+            padding: 4px 10px;
             border-radius: 30px;
-            font-size: 0.75rem;
+            font-size: 0.65rem;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 1px;
@@ -467,15 +471,14 @@ $paid_tickets = $total_tickets - $used_tickets;
             font-weight: 600;
         }
         
-        /* Empty State */
+        /* EMPTY STATE */
         .empty-state {
             text-align: center;
-            padding: 80px 40px;
+            padding: 60px 40px;
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.2);
-            border-radius: 32px;
+            border-radius: 20px;
             position: relative;
             overflow: hidden;
         }
@@ -485,56 +488,52 @@ $paid_tickets = $total_tickets - $used_tickets;
             position: absolute;
             bottom: 20px;
             right: 20px;
-            font-size: 6rem;
+            font-size: 5rem;
             opacity: 0.03;
             pointer-events: none;
         }
         
         .empty-state p {
             color: var(--text-secondary);
-            font-size: 1.2rem;
+            font-size: 1.1rem;
         }
         
-        /* Cinema Strip Divider */
-        .cinema-strip {
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
-            margin: 20px 0 30px;
-            opacity: 0.3;
-        }
-        
-        /* Responsive */
         @media (max-width: 1024px) {
             .table-container {
                 overflow-x: auto;
             }
-            
             .tickets-table {
-                min-width: 1000px;
+                min-width: 900px;
             }
         }
         
         @media (max-width: 768px) {
-            .nav-links {
-                display: none;
+            .nav-container {
+                flex-direction: column;
+                gap: 10px;
             }
-            
+            .nav-links {
+                justify-content: center;
+            }
             h1 {
                 font-size: 2rem;
             }
-            
-            .header {
+            .header-section {
                 flex-direction: column;
                 align-items: flex-start;
             }
-            
             .header-actions {
                 width: 100%;
             }
-            
             .btn-print, .btn-export, .btn-back {
                 flex: 1;
                 text-align: center;
+            }
+            .screening-info {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
             }
         }
     </style>
@@ -557,7 +556,7 @@ $paid_tickets = $total_tickets - $used_tickets;
     </nav>
     
     <main class="container">
-        <div class="header">
+        <div class="header-section">
             <h1>Tickets List</h1>
             <div class="header-actions">
                 <button class="btn-print" onclick="window.print()">🖨️ Print List</button>
@@ -566,34 +565,33 @@ $paid_tickets = $total_tickets - $used_tickets;
             </div>
         </div>
         
-        <!-- Cinema Strip Divider -->
         <div class="cinema-strip"></div>
         
         <!-- Screening Info -->
         <div class="screening-info">
             <div class="info-item">
                 <div class="info-label">Movie</div>
-                <div class="info-value"><?php echo htmlspecialchars($screening['title']); ?></div>
+                <div class="info-value">🎬 <?php echo htmlspecialchars($screening['title']); ?></div>
             </div>
             <div class="info-item">
                 <div class="info-label">Cinema</div>
-                <div class="info-value"><?php echo htmlspecialchars($screening['cinema_name']); ?></div>
+                <div class="info-value">🏛️ <?php echo htmlspecialchars($screening['cinema_name']); ?></div>
             </div>
             <div class="info-item">
                 <div class="info-label">Screen</div>
-                <div class="info-value"><?php echo $screening['screen_number']; ?></div>
+                <div class="info-value">📺 Screen <?php echo $screening['screen_number']; ?></div>
             </div>
             <div class="info-item">
                 <div class="info-label">Date</div>
-                <div class="info-value"><?php echo date('M d, Y', strtotime($screening['show_date'])); ?></div>
+                <div class="info-value">📅 <?php echo date('M d, Y', strtotime($screening['show_date'])); ?></div>
             </div>
             <div class="info-item">
                 <div class="info-label">Time</div>
-                <div class="info-value"><?php echo date('h:i A', strtotime($screening['show_time'])); ?></div>
+                <div class="info-value">⏰ <?php echo date('h:i A', strtotime($screening['show_time'])); ?></div>
             </div>
             <div class="info-item">
                 <div class="info-label">Price</div>
-                <div class="info-value">₱<?php echo number_format($screening['price'], 2); ?></div>
+                <div class="info-value">💰 ₱<?php echo number_format($screening['price'], 2); ?></div>
             </div>
         </div>
         
@@ -630,7 +628,6 @@ $paid_tickets = $total_tickets - $used_tickets;
                             <th>Ticket Code</th>
                             <th>Customer</th>
                             <th>Email</th>
-                            <th>Phone</th>
                             <th>Seats</th>
                             <th>Qty</th>
                             <th>Amount</th>
@@ -643,8 +640,7 @@ $paid_tickets = $total_tickets - $used_tickets;
                                 <td><code><?php echo $ticket['ticket_code']; ?></code></td>
                                 <td><?php echo htmlspecialchars($ticket['first_name'] . ' ' . $ticket['last_name']); ?></td>
                                 <td><?php echo htmlspecialchars($ticket['email']); ?></td>
-                                <td><?php echo htmlspecialchars($ticket['phone']); ?></td>
-                                <td><?php echo $ticket['seat_numbers'] ?: 'N/A'; ?></td>
+                                <td><?php echo $ticket['seat_numbers'] ?: '—'; ?></td>
                                 <td><?php echo $ticket['quantity']; ?></td>
                                 <td class="amount-highlight">₱<?php echo number_format($ticket['total_price'], 2); ?></td>
                                 <td>
@@ -666,14 +662,12 @@ $paid_tickets = $total_tickets - $used_tickets;
             const rows = table.querySelectorAll('tr');
             let csv = [];
             
-            // Get headers
             const headers = [];
             table.querySelectorAll('thead th').forEach(th => {
                 headers.push(th.textContent);
             });
             csv.push(headers.join(','));
             
-            // Get data
             rows.forEach(row => {
                 const rowData = [];
                 row.querySelectorAll('td').forEach(td => {

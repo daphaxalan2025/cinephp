@@ -1,5 +1,5 @@
 <?php
-// staff/profile.php - FIXED: Uses staff_cinemas table instead of users.cinema_id
+// staff/profile.php - PROFESSIONAL DESIGN MATCHING CINEMAS PAGE
 require_once '../includes/functions.php';
 requireStaff();
 
@@ -146,11 +146,7 @@ $days_worked = $stmt->fetchColumn();
             --card-gradient: linear-gradient(135deg, rgba(26, 26, 26, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%);
         }
         
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
             background: var(--black);
@@ -175,37 +171,38 @@ $days_worked = $stmt->fetchColumn();
             z-index: -1;
         }
         
-        /* Navigation */
+        /* NAVBAR - MATCHING CINEMAS PAGE */
         .navbar {
             background: rgba(10, 10, 10, 0.95);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
+            padding: 0.8rem 0;
             position: sticky;
             top: 0;
             z-index: 1000;
         }
         
         .nav-container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 20px;
         }
         
         .logo {
             color: var(--red);
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             font-weight: 800;
             font-family: 'Montserrat', sans-serif;
             text-decoration: none;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 1.5px;
             position: relative;
             transition: all 0.3s;
+            white-space: nowrap;
         }
         
         .logo:hover {
@@ -214,28 +211,31 @@ $days_worked = $stmt->fetchColumn();
         
         .logo::before {
             content: "🎬";
-            margin-right: 10px;
-            font-size: 1.5rem;
+            margin-right: 8px;
+            font-size: 1.2rem;
             filter: drop-shadow(0 0 5px var(--red));
         }
         
         .nav-links {
             display: flex;
-            gap: 25px;
+            gap: 5px;
             align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
         }
         
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             transition: all 0.3s;
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             position: relative;
+            white-space: nowrap;
         }
         
         .nav-links a::after {
@@ -266,26 +266,41 @@ $days_worked = $stmt->fetchColumn();
             width: 60%;
         }
         
-        /* Main Container */
+        /* MAIN CONTAINER - MATCHING CINEMAS PAGE */
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
-            padding: 30px;
+            padding: 30px 20px;
+        }
+        
+        /* HEADER SECTION - MATCHING CINEMAS PAGE */
+        .header-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
         }
         
         h1 {
-            font-size: 2.5rem;
+            font-size: 2.8rem;
             font-weight: 800;
             background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            margin: 0 0 30px 0;
+            margin: 0;
             text-transform: uppercase;
-            letter-spacing: 2px;
         }
         
-        /* Profile Container */
+        /* CINEMA STRIP - MATCHING CINEMAS PAGE */
+        .cinema-strip {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            margin: 30px 0;
+            opacity: 0.5;
+        }
+        
+        /* PROFILE CONTAINER */
         .profile-container {
             display: grid;
             grid-template-columns: 350px 1fr;
@@ -293,11 +308,10 @@ $days_worked = $stmt->fetchColumn();
             margin-top: 30px;
         }
         
-        /* Sidebar */
+        /* SIDEBAR */
         .profile-sidebar {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.2);
             border-radius: 24px;
             padding: 30px;
@@ -373,14 +387,14 @@ $days_worked = $stmt->fetchColumn();
         }
         
         .upload-btn:hover {
-            transform: scale(1.1) rotate(90deg);
+            transform: scale(1.1);
             box-shadow: 0 0 30px rgba(229, 9, 20, 0.5);
         }
         
         #profile_pic { display: none; }
         
         .profile-name {
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             font-weight: 700;
             color: #fff;
             margin-bottom: 5px;
@@ -390,11 +404,12 @@ $days_worked = $stmt->fetchColumn();
         .profile-username {
             color: var(--text-secondary);
             margin-bottom: 15px;
+            font-size: 0.9rem;
         }
         
         .staff-badge {
             display: inline-block;
-            padding: 8px 20px;
+            padding: 6px 18px;
             background: var(--red);
             color: #fff;
             border-radius: 40px;
@@ -402,7 +417,7 @@ $days_worked = $stmt->fetchColumn();
             margin-bottom: 20px;
             text-transform: uppercase;
             letter-spacing: 1px;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
         }
         
         .cinema-info {
@@ -415,7 +430,7 @@ $days_worked = $stmt->fetchColumn();
         
         .cinema-label {
             color: var(--text-secondary);
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             text-transform: uppercase;
             letter-spacing: 1px;
             margin-bottom: 5px;
@@ -424,12 +439,12 @@ $days_worked = $stmt->fetchColumn();
         .cinema-name {
             color: var(--red);
             font-weight: 600;
-            font-size: 1.1rem;
+            font-size: 1rem;
         }
         
         .cinema-location {
             color: var(--text-secondary);
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             margin-top: 5px;
         }
         
@@ -444,24 +459,23 @@ $days_worked = $stmt->fetchColumn();
         }
         
         .stat-value {
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             font-weight: 700;
             color: var(--red);
             font-family: 'Montserrat', sans-serif;
         }
         
         .stat-label {
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             color: var(--text-secondary);
             text-transform: uppercase;
             letter-spacing: 1px;
         }
         
-        /* Main Content */
+        /* MAIN CONTENT */
         .profile-content {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.2);
             border-radius: 24px;
             padding: 30px;
@@ -476,7 +490,7 @@ $days_worked = $stmt->fetchColumn();
         }
         
         .tab-button {
-            padding: 12px 25px;
+            padding: 10px 22px;
             background: transparent;
             border: 1px solid rgba(229, 9, 20, 0.3);
             color: var(--text-primary);
@@ -486,7 +500,7 @@ $days_worked = $stmt->fetchColumn();
             transition: all 0.3s;
             text-transform: uppercase;
             letter-spacing: 1px;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
         }
         
         .tab-button:hover {
@@ -517,7 +531,7 @@ $days_worked = $stmt->fetchColumn();
         
         .tab-pane h2 {
             color: var(--red);
-            font-size: 1.5rem;
+            font-size: 1.3rem;
             margin-bottom: 20px;
             position: relative;
             padding-bottom: 10px;
@@ -528,13 +542,13 @@ $days_worked = $stmt->fetchColumn();
             position: absolute;
             bottom: 0;
             left: 0;
-            width: 60px;
-            height: 3px;
+            width: 50px;
+            height: 2px;
             background: var(--red);
-            border-radius: 3px;
+            border-radius: 2px;
         }
         
-        /* Forms */
+        /* FORMS */
         .form-group {
             margin-bottom: 20px;
         }
@@ -546,12 +560,12 @@ $days_worked = $stmt->fetchColumn();
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 1px;
-            font-size: 0.8rem;
+            font-size: 0.7rem;
         }
         
         .form-group input {
             width: 100%;
-            padding: 14px 18px;
+            padding: 12px 16px;
             background: rgba(0, 0, 0, 0.3);
             border: 1px solid rgba(229, 9, 20, 0.2);
             color: var(--text-primary);
@@ -569,7 +583,7 @@ $days_worked = $stmt->fetchColumn();
         .form-group small {
             display: block;
             color: var(--text-secondary);
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             margin-top: 5px;
             padding-left: 15px;
         }
@@ -588,48 +602,28 @@ $days_worked = $stmt->fetchColumn();
             font-weight: 600;
             letter-spacing: 1px;
             text-transform: uppercase;
-            font-size: 1rem;
-            padding: 14px 30px;
+            font-size: 0.85rem;
+            padding: 12px 28px;
             border-radius: 40px;
             transition: all 0.3s;
-            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
             cursor: pointer;
-            position: relative;
-            overflow: hidden;
             width: 100%;
-        }
-        
-        .btn-primary::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s;
         }
         
         .btn-primary:hover {
             background: var(--red-dark);
-            transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(229, 9, 20, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
         }
         
-        .btn-primary:hover::before {
-            left: 100%;
-        }
-        
-        /* Alerts */
+        /* ALERTS */
         .alert {
-            padding: 18px 25px;
+            padding: 15px 20px;
             margin-bottom: 20px;
             border-radius: 40px;
-            animation: slideIn 0.3s ease;
             background: rgba(10, 10, 10, 0.8);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.2);
+            font-size: 0.85rem;
         }
         
         .alert-error {
@@ -637,30 +631,11 @@ $days_worked = $stmt->fetchColumn();
             color: #ff6b6b;
         }
         
-        .alert-error ul {
-            margin-left: 20px;
+        .alert-success {
+            border-left: 4px solid #44ff44;
+            color: #44ff44;
         }
         
-        @keyframes slideIn {
-            from {
-                transform: translateY(-20px);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
-        }
-        
-        /* Cinema Strip Divider */
-        .cinema-strip {
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
-            margin: 20px 0 30px;
-            opacity: 0.3;
-        }
-        
-        /* Responsive */
         @media (max-width: 1024px) {
             .profile-container {
                 grid-template-columns: 1fr;
@@ -668,24 +643,30 @@ $days_worked = $stmt->fetchColumn();
         }
         
         @media (max-width: 768px) {
-            .nav-links {
-                display: none;
+            .nav-container {
+                flex-direction: column;
+                gap: 10px;
             }
-            
+            .nav-links {
+                justify-content: center;
+            }
             h1 {
                 font-size: 2rem;
             }
-            
+            .header-section {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
             .form-row {
                 grid-template-columns: 1fr;
             }
-            
             .tab-buttons {
                 flex-direction: column;
             }
-            
             .tab-button {
                 width: 100%;
+                text-align: center;
             }
         }
     </style>
@@ -708,18 +689,25 @@ $days_worked = $stmt->fetchColumn();
     </nav>
     
     <main class="container">
-        <h1>Staff Profile</h1>
+        <div class="header-section">
+            <h1>Staff Profile</h1>
+        </div>
         
-        <!-- Cinema Strip Divider -->
         <div class="cinema-strip"></div>
         
         <?php if (!empty($errors)): ?>
             <div class="alert alert-error">
-                <ul style="margin-bottom: 0;">
+                <ul style="margin-left: 20px; margin-bottom: 0;">
                     <?php foreach ($errors as $error): ?>
                         <li><?php echo htmlspecialchars($error); ?></li>
                     <?php endforeach; ?>
                 </ul>
+            </div>
+        <?php endif; ?>
+        
+        <?php $flash = getFlash(); if ($flash): ?>
+            <div class="alert alert-<?php echo $flash['type']; ?>">
+                <?php echo $flash['message']; ?>
             </div>
         <?php endif; ?>
         
@@ -800,6 +788,7 @@ $days_worked = $stmt->fetchColumn();
                         <div class="form-group">
                             <label>Phone Number</label>
                             <input type="tel" name="phone" value="<?php echo htmlspecialchars(str_replace('+63', '', $user['phone'] ?? '')); ?>" placeholder="9123456789">
+                            <small>Enter 10-digit mobile number</small>
                         </div>
                         
                         <button type="submit" name="update_profile" class="btn-primary">Update Profile</button>

@@ -1,6 +1,5 @@
 <?php
-// staff/scan.php - COMPLETELY FIXED
-// Added: Proper ticket status update, online ticket detection, transaction handling
+// staff/scan.php - PROFESSIONAL DESIGN MATCHING CINEMAS PAGE
 require_once '../includes/functions.php';
 requireStaff();
 
@@ -8,7 +7,7 @@ $pdo = getDB();
 $user = getCurrentUser();
 
 autoArchiveExpiredScreenings();
-autoExpireOnlineTickets(); // <-- ADD THIS: Auto-expire online tickets
+autoExpireOnlineTickets();
 
 // Get staff's assigned cinema from staff_cinemas table
 $staff_cinema = getStaffCinema($user['id']);
@@ -20,7 +19,6 @@ $is_online_ticket = false;
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_code'])) {
     $ticket_code = trim($_POST['ticket_code'] ?? '');
     if (!empty($ticket_code)) {
-        // First validate without updating
         $validation = validateTicketByCode($ticket_code, $cinema_id);
         
         if (!$validation['valid']) {
@@ -29,22 +27,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_code'])) {
         } else {
             $ticket_info = $validation['ticket'];
             
-            // Check if this is an online ticket
             if ($ticket_info['ticket_type'] == 'online') {
-                // ONLINE TICKET: Do NOT mark as used, just show info
                 $result = 'online_ticket';
                 $is_online_ticket = true;
-                // No database update for online tickets
             } else {
-                // PHYSICAL TICKET: Mark as used for cinema entry
                 try {
                     $pdo->beginTransaction();
                     
-                    // Update ticket status
                     $stmt = $pdo->prepare("UPDATE tickets SET status = 'used', used_at = NOW(), verified_by = ? WHERE id = ?");
                     $stmt->execute([$user['id'], $ticket_info['id']]);
                     
-                    // Update screening available seats if needed
                     if ($ticket_info['screening_id']) {
                         $stmt2 = $pdo->prepare("UPDATE screenings SET available_seats = available_seats - ? WHERE id = ?");
                         $stmt2->execute([$ticket_info['quantity'], $ticket_info['screening_id']]);
@@ -111,52 +103,73 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_code'])) {
             z-index: -1;
         }
         
+        /* NAVBAR - MATCHING CINEMAS PAGE */
         .navbar {
             background: rgba(10, 10, 10, 0.95);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
+            padding: 0.8rem 0;
             position: sticky;
             top: 0;
             z-index: 1000;
         }
         
         .nav-container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 20px;
         }
         
         .logo {
             color: var(--red);
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             font-weight: 800;
             font-family: 'Montserrat', sans-serif;
             text-decoration: none;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 1.5px;
+            position: relative;
             transition: all 0.3s;
+            white-space: nowrap;
         }
-        .logo:hover { text-shadow: var(--red-glow); }
-        .logo::before { content: "🎬"; margin-right: 10px; font-size: 1.5rem; filter: drop-shadow(0 0 5px var(--red)); }
         
-        .nav-links { display: flex; gap: 25px; align-items: center; }
+        .logo:hover {
+            text-shadow: var(--red-glow);
+        }
+        
+        .logo::before {
+            content: "🎬";
+            margin-right: 8px;
+            font-size: 1.2rem;
+            filter: drop-shadow(0 0 5px var(--red));
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             transition: all 0.3s;
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             position: relative;
+            white-space: nowrap;
         }
+        
         .nav-links a::after {
             content: '';
             position: absolute;
@@ -168,30 +181,65 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_code'])) {
             background: var(--red);
             transition: width 0.3s;
         }
-        .nav-links a:hover { color: var(--red); }
-        .nav-links a:hover::after { width: 60%; }
-        .nav-links a.active { color: var(--red); }
         
-        .container { max-width: 1400px; margin: 0 auto; padding: 30px; }
+        .nav-links a:hover {
+            color: var(--red);
+        }
+        
+        .nav-links a:hover::after {
+            width: 60%;
+        }
+        
+        .nav-links a.active {
+            color: var(--red);
+        }
+        
+        .nav-links a.active::after {
+            width: 60%;
+        }
+        
+        /* MAIN CONTAINER - MATCHING CINEMAS PAGE */
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+        
+        /* HEADER SECTION - MATCHING CINEMAS PAGE */
+        .header-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
         
         h1 {
-            font-size: 2.5rem;
+            font-size: 2.8rem;
             font-weight: 800;
             background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            margin: 0 0 30px 0;
+            margin: 0;
             text-transform: uppercase;
-            letter-spacing: 2px;
         }
         
-        .scanner-container { max-width: 800px; margin: 0 auto; }
+        /* CINEMA STRIP - MATCHING CINEMAS PAGE */
+        .cinema-strip {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            margin: 30px 0;
+            opacity: 0.5;
+        }
+        
+        .scanner-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
         
         .scanner-card {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.2);
             border-radius: 24px;
             padding: 30px;
@@ -217,10 +265,28 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_code'])) {
             100% { transform: translateX(100%); }
         }
         
-        .scanner-card h2 { color: var(--red); margin-bottom: 20px; font-size: 1.5rem; }
+        .scanner-card h2 {
+            color: var(--red);
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+        }
         
-        #reader { width: 100%; max-width: 500px; margin: 0 auto; min-height: 300px; border: 2px solid rgba(229,9,20,0.3); border-radius: 16px; overflow: hidden; background: #111; }
-        #reader video { width: 100%; height: auto; display: block; }
+        #reader {
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            min-height: 300px;
+            border: 2px solid rgba(229,9,20,0.3);
+            border-radius: 16px;
+            overflow: hidden;
+            background: #111;
+        }
+        
+        #reader video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
         
         .scanner-loading {
             text-align: center;
@@ -251,10 +317,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_code'])) {
             box-shadow: 0 5px 20px rgba(229,9,20,0.3);
         }
         
-        .manual-input { margin-top: 30px; padding-top: 30px; border-top: 1px solid rgba(229,9,20,0.2); }
-        .manual-input h3 { color: var(--red); margin-bottom: 15px; }
+        .manual-input {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 1px solid rgba(229,9,20,0.2);
+        }
         
-        .input-group { display: flex; gap: 10px; }
+        .manual-input h3 {
+            color: var(--red);
+            margin-bottom: 15px;
+        }
+        
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+        
         .input-group input {
             flex: 1;
             padding: 14px 18px;
@@ -265,7 +343,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_code'])) {
             transition: all 0.3s;
             font-size: 1rem;
         }
-        .input-group input:focus { border-color: var(--red); outline: none; box-shadow: 0 0 20px rgba(229,9,20,0.2); }
+        
+        .input-group input:focus {
+            border-color: var(--red);
+            outline: none;
+            box-shadow: 0 0 20px rgba(229,9,20,0.2);
+        }
+        
         .input-group button {
             padding: 14px 25px;
             background: var(--red);
@@ -278,12 +362,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_code'])) {
             text-transform: uppercase;
             letter-spacing: 1px;
         }
-        .input-group button:hover { background: var(--red-dark); transform: translateY(-2px); box-shadow: 0 5px 20px rgba(229,9,20,0.3); }
+        
+        .input-group button:hover {
+            background: var(--red-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(229,9,20,0.3);
+        }
         
         .result-card {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 2px solid;
             border-radius: 24px;
             padding: 30px;
@@ -292,6 +380,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_code'])) {
             position: relative;
             overflow: hidden;
         }
+        
         .result-valid { border-color: #44ff44; }
         .result-online { border-color: #00ffff; }
         .result-invalid { border-color: #ff4444; }
@@ -308,10 +397,28 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_code'])) {
             text-align: left;
         }
         
-        .detail-row { display: flex; padding: 12px 0; border-bottom: 1px solid rgba(229,9,20,0.1); }
-        .detail-label { width: 120px; color: var(--text-secondary); font-size: 0.85rem; }
-        .detail-value { flex: 1; color: #fff; font-weight: 500; }
-        .detail-value.highlight { color: var(--red); font-weight: 600; }
+        .detail-row {
+            display: flex;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(229,9,20,0.1);
+        }
+        
+        .detail-label {
+            width: 120px;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+        
+        .detail-value {
+            flex: 1;
+            color: #fff;
+            font-weight: 500;
+        }
+        
+        .detail-value.highlight {
+            color: var(--red);
+            font-weight: 600;
+        }
         
         .online-notice {
             background: rgba(0, 255, 255, 0.1);
@@ -324,19 +431,32 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_code'])) {
             font-weight: 600;
         }
         
-        .cinema-strip {
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
-            margin: 20px 0 30px;
-            opacity: 0.3;
-        }
-        
         @media (max-width: 768px) {
-            .nav-links { display: none; }
-            h1 { font-size: 2rem; }
-            .input-group { flex-direction: column; }
-            .detail-row { flex-direction: column; gap: 5px; }
-            .detail-label { width: auto; }
+            .nav-container {
+                flex-direction: column;
+                gap: 10px;
+            }
+            .nav-links {
+                justify-content: center;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+            .header-section {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+            .input-group {
+                flex-direction: column;
+            }
+            .detail-row {
+                flex-direction: column;
+                gap: 5px;
+            }
+            .detail-label {
+                width: auto;
+            }
         }
     </style>
 </head>
@@ -358,10 +478,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_code'])) {
     </nav>
     
     <main class="container">
-        <div class="scanner-container">
+        <div class="header-section">
             <h1>QR Scanner</h1>
-            <div class="cinema-strip"></div>
-            
+        </div>
+        
+        <div class="cinema-strip"></div>
+        
+        <div class="scanner-container">
             <div class="scanner-card">
                 <h2>Scan Ticket QR Code</h2>
                 <div id="reader">
@@ -385,7 +508,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_code'])) {
             
             <?php if ($result && $ticket_info): ?>
                 <?php if ($result == 'online_ticket'): ?>
-                    <!-- ONLINE TICKET - Just display info, DO NOT mark as used -->
                     <div class="result-card result-online">
                         <div class="result-icon">💻</div>
                         <div class="result-title" style="color:#00ffff;">ONLINE STREAMING TICKET</div>
@@ -425,7 +547,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_code'])) {
                     </div>
                     
                 <?php elseif ($result == 'valid'): ?>
-                    <!-- PHYSICAL TICKET - Valid and marked as used -->
                     <div class="result-card result-valid">
                         <div class="result-icon">✅</div>
                         <div class="result-title" style="color:#44ff44;">VALID TICKET - ENTRY GRANTED</div>
@@ -500,7 +621,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_code'])) {
         </div>
     </main>
     
-    <!-- QR Library -->
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script>
         let html5QrCodeScanner = null;
@@ -576,7 +696,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_code'])) {
             form.appendChild(input);
             document.body.appendChild(form);
             
-            // Show loading indicator
             const btn = document.querySelector('.start-camera-btn');
             if (btn) {
                 btn.textContent = '⏳ Processing...';

@@ -1,5 +1,5 @@
 <?php
-// staff/dashboard.php - UPDATED: Uses staff_cinemas table instead of users.cinema_id
+// staff/dashboard.php - PROFESSIONAL DESIGN MATCHING CINEMAS PAGE
 require_once '../includes/functions.php';
 requireStaff();
 
@@ -106,7 +106,6 @@ $pending_verifications = $pending['pending'] ?? 0;
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        /* Your existing styles remain exactly the same - keeping for brevity */
         :root {
             --black: #0a0a0a;
             --deep-gray: #1a1a1a;
@@ -147,54 +146,73 @@ $pending_verifications = $pending['pending'] ?? 0;
             z-index: -1;
         }
         
+        /* NAVBAR - MATCHING CINEMAS PAGE */
         .navbar {
             background: rgba(10, 10, 10, 0.95);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border-bottom: 1px solid rgba(229, 9, 20, 0.2);
-            padding: 1rem 0;
+            padding: 0.8rem 0;
             position: sticky;
             top: 0;
             z-index: 1000;
         }
         
         .nav-container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 20px;
         }
         
         .logo {
             color: var(--red);
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             font-weight: 800;
             font-family: 'Montserrat', sans-serif;
             text-decoration: none;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 1.5px;
             position: relative;
             transition: all 0.3s;
+            white-space: nowrap;
         }
         
-        .logo:hover { text-shadow: var(--red-glow); }
-        .logo::before { content: "🎬"; margin-right: 10px; font-size: 1.5rem; filter: drop-shadow(0 0 5px var(--red)); }
+        .logo:hover {
+            text-shadow: var(--red-glow);
+        }
         
-        .nav-links { display: flex; gap: 25px; align-items: center; }
+        .logo::before {
+            content: "🎬";
+            margin-right: 8px;
+            font-size: 1.2rem;
+            filter: drop-shadow(0 0 5px var(--red));
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        
         .nav-links a {
             color: var(--text-primary);
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             transition: all 0.3s;
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             position: relative;
+            white-space: nowrap;
         }
+        
         .nav-links a::after {
             content: '';
             position: absolute;
@@ -206,23 +224,40 @@ $pending_verifications = $pending['pending'] ?? 0;
             background: var(--red);
             transition: width 0.3s;
         }
-        .nav-links a:hover { color: var(--red); }
-        .nav-links a:hover::after { width: 60%; }
-        .nav-links a.active { color: var(--red); }
         
-        .container { max-width: 1400px; margin: 0 auto; padding: 30px; }
+        .nav-links a:hover {
+            color: var(--red);
+        }
         
-        .staff-header {
+        .nav-links a:hover::after {
+            width: 60%;
+        }
+        
+        .nav-links a.active {
+            color: var(--red);
+        }
+        
+        .nav-links a.active::after {
+            width: 60%;
+        }
+        
+        /* MAIN CONTAINER - MATCHING CINEMAS PAGE */
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+        
+        /* HEADER SECTION - MATCHING CINEMAS PAGE */
+        .header-section {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 30px;
-            flex-wrap: wrap;
-            gap: 20px;
         }
         
         h1 {
-            font-size: 2.5rem;
+            font-size: 2.8rem;
             font-weight: 800;
             background: linear-gradient(135deg, #fff 0%, var(--red) 100%);
             -webkit-background-clip: text;
@@ -230,7 +265,6 @@ $pending_verifications = $pending['pending'] ?? 0;
             background-clip: text;
             margin: 0;
             text-transform: uppercase;
-            letter-spacing: 2px;
         }
         
         .cinema-badge {
@@ -241,23 +275,31 @@ $pending_verifications = $pending['pending'] ?? 0;
             font-weight: 600;
             font-size: 1rem;
             box-shadow: 0 5px 20px rgba(229, 9, 20, 0.3);
-            letter-spacing: 1px;
         }
         
-        .pending-badge {
+        /* CINEMA STRIP - MATCHING CINEMAS PAGE */
+        .cinema-strip {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            margin: 30px 0;
+            opacity: 0.5;
+        }
+        
+        /* STAFF NOTICE - MATCHING CINEMAS PAGE */
+        .staff-notice {
             background: rgba(229, 9, 20, 0.1);
             border: 1px solid var(--red);
             color: var(--text-primary);
-            padding: 15px 25px;
+            padding: 15px 20px;
             border-radius: 40px;
-            margin-bottom: 25px;
+            margin-bottom: 20px;
             border-left: 4px solid var(--red);
-            font-weight: 500;
         }
         
+        /* STATS GRID */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 25px;
             margin: 30px 0;
         }
@@ -265,12 +307,11 @@ $pending_verifications = $pending['pending'] ?? 0;
         .stat-card {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.1);
-            border-radius: 24px;
-            padding: 25px;
+            border-radius: 16px;
+            padding: 22px;
             display: flex;
-            gap: 20px;
+            gap: 18px;
             align-items: center;
             transition: all 0.3s;
             position: relative;
@@ -302,9 +343,9 @@ $pending_verifications = $pending['pending'] ?? 0;
         }
         
         .stat-icon {
-            font-size: 2.5rem;
-            width: 70px;
-            height: 70px;
+            font-size: 2.2rem;
+            width: 60px;
+            height: 60px;
             background: rgba(229, 9, 20, 0.1);
             border: 1px solid var(--red);
             border-radius: 50%;
@@ -315,7 +356,7 @@ $pending_verifications = $pending['pending'] ?? 0;
         }
         
         .stat-content h3 {
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             color: var(--text-secondary);
             margin-bottom: 5px;
             text-transform: uppercase;
@@ -323,25 +364,26 @@ $pending_verifications = $pending['pending'] ?? 0;
         }
         
         .stat-number {
-            font-size: 2.2rem;
+            font-size: 1.8rem;
             font-weight: 700;
             color: var(--red);
             font-family: 'Montserrat', sans-serif;
         }
         
+        /* QUICK ACTIONS */
         .quick-actions {
-            margin: 50px 0;
+            margin: 45px 0;
         }
         
         .quick-actions h2 {
             color: var(--red);
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             margin-bottom: 20px;
         }
         
         .actions-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 20px;
             margin-top: 20px;
         }
@@ -349,10 +391,9 @@ $pending_verifications = $pending['pending'] ?? 0;
         .action-card {
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.1);
             border-radius: 16px;
-            padding: 25px;
+            padding: 22px;
             text-align: center;
             text-decoration: none;
             color: var(--text-primary);
@@ -374,15 +415,15 @@ $pending_verifications = $pending['pending'] ?? 0;
         }
         
         .action-card:hover {
-            transform: translateY(-5px) scale(1.02);
+            transform: translateY(-5px);
             border-color: var(--red);
-            box-shadow: 0 20px 40px rgba(229, 9, 20, 0.2);
+            box-shadow: 0 20px 40px rgba(229, 9, 20, 0.15);
         }
         
         .action-icon {
-            font-size: 3rem;
+            font-size: 2.5rem;
             display: block;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
             color: var(--red);
         }
         
@@ -390,9 +431,10 @@ $pending_verifications = $pending['pending'] ?? 0;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 1px;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
         }
         
+        /* SCREENINGS LIST */
         .screenings-list {
             margin-top: 20px;
         }
@@ -401,13 +443,12 @@ $pending_verifications = $pending['pending'] ?? 0;
             display: flex;
             align-items: center;
             gap: 20px;
-            padding: 20px;
+            padding: 18px;
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.1);
             border-radius: 16px;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
             transition: all 0.3s;
         }
         
@@ -418,10 +459,10 @@ $pending_verifications = $pending['pending'] ?? 0;
         }
         
         .screening-time {
-            font-size: 1.3rem;
+            font-size: 1.2rem;
             font-weight: 700;
             color: var(--red);
-            min-width: 120px;
+            min-width: 100px;
             font-family: 'Montserrat', sans-serif;
         }
         
@@ -432,22 +473,22 @@ $pending_verifications = $pending['pending'] ?? 0;
         .screening-info h4 {
             margin-bottom: 5px;
             color: #fff;
-            font-size: 1.2rem;
+            font-size: 1.1rem;
         }
         
         .screening-info p {
             color: var(--text-secondary);
-            font-size: 0.9rem;
+            font-size: 0.85rem;
         }
         
         .seat-progress {
-            width: 180px;
+            width: 160px;
         }
         
         .progress-bar {
-            height: 8px;
+            height: 6px;
             background: rgba(255, 255, 255, 0.1);
-            border-radius: 4px;
+            border-radius: 3px;
             overflow: hidden;
             margin-bottom: 5px;
         }
@@ -455,23 +496,23 @@ $pending_verifications = $pending['pending'] ?? 0;
         .progress-fill {
             height: 100%;
             background: var(--red);
-            border-radius: 4px;
+            border-radius: 3px;
             transition: width 0.3s;
         }
         
         .seat-progress small {
             color: var(--text-secondary);
-            font-size: 0.8rem;
+            font-size: 0.75rem;
         }
         
         .btn-small {
-            padding: 8px 20px;
+            padding: 8px 18px;
             border: 1px solid rgba(229, 9, 20, 0.3);
             border-radius: 40px;
             color: var(--text-primary);
             text-decoration: none;
             transition: all 0.3s;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             font-weight: 500;
         }
         
@@ -481,13 +522,13 @@ $pending_verifications = $pending['pending'] ?? 0;
             background: rgba(229, 9, 20, 0.1);
         }
         
+        /* VERIFICATIONS TABLE */
         .verifications-table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
             background: var(--card-gradient);
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(229, 9, 20, 0.1);
             border-radius: 16px;
             overflow: hidden;
@@ -495,19 +536,20 @@ $pending_verifications = $pending['pending'] ?? 0;
         
         .verifications-table th {
             text-align: left;
-            padding: 18px 15px;
+            padding: 15px 15px;
             background: rgba(229, 9, 20, 0.15);
             color: var(--red);
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 1px;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
         }
         
         .verifications-table td {
-            padding: 15px;
+            padding: 12px 15px;
             border-bottom: 1px solid rgba(229, 9, 20, 0.1);
             color: var(--text-secondary);
+            font-size: 0.85rem;
         }
         
         .verifications-table tr:last-child td {
@@ -520,23 +562,32 @@ $pending_verifications = $pending['pending'] ?? 0;
             padding: 4px 10px;
             border-radius: 30px;
             font-family: 'Monaco', monospace;
+            font-size: 0.8rem;
         }
         
         .badge-success {
             background: rgba(68, 255, 68, 0.15);
             color: #44ff44;
-            padding: 4px 12px;
+            padding: 4px 10px;
             border-radius: 30px;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             font-weight: 600;
             border: 1px solid #44ff44;
         }
         
-        .cinema-strip {
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--red), transparent);
-            margin: 20px 0 30px;
-            opacity: 0.3;
+        .section-title {
+            color: var(--red);
+            font-size: 1.3rem;
+            margin: 30px 0 20px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            background: var(--card-gradient);
+            border-radius: 16px;
+            border: 1px solid rgba(229,9,20,0.1);
+            color: var(--text-secondary);
         }
         
         @media (max-width: 1024px) {
@@ -546,11 +597,35 @@ $pending_verifications = $pending['pending'] ?? 0;
         }
         
         @media (max-width: 768px) {
-            .nav-links { display: none; }
-            h1 { font-size: 2rem; }
-            .staff-header { flex-direction: column; align-items: flex-start; }
-            .screening-item { flex-direction: column; align-items: flex-start; }
-            .verifications-table { overflow-x: auto; display: block; }
+            .nav-container {
+                flex-direction: column;
+                gap: 10px;
+            }
+            .nav-links {
+                justify-content: center;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+            .header-section {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+            .screening-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .verifications-table {
+                overflow-x: auto;
+                display: block;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            .actions-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -572,7 +647,7 @@ $pending_verifications = $pending['pending'] ?? 0;
     </nav>
     
     <main class="container">
-        <div class="staff-header">
+        <div class="header-section">
             <h1>Staff Dashboard</h1>
             <div class="cinema-badge">
                 🎬 <?php echo htmlspecialchars($cinema_name); ?>
@@ -582,7 +657,7 @@ $pending_verifications = $pending['pending'] ?? 0;
         <div class="cinema-strip"></div>
         
         <?php if ($pending_verifications > 0): ?>
-            <div class="pending-badge">
+            <div class="staff-notice">
                 ⏳ You have <strong><?php echo $pending_verifications; ?></strong> tickets waiting to be verified today!
             </div>
         <?php endif; ?>
@@ -632,10 +707,10 @@ $pending_verifications = $pending['pending'] ?? 0;
             </div>
         </div>
         
-        <h2 style="color: var(--red); margin: 30px 0 20px;">Today's Screenings</h2>
+        <h2 class="section-title">Today's Screenings</h2>
         <?php if (empty($today_screenings)): ?>
-            <div style="text-align: center; padding: 40px; background: var(--card-gradient); border-radius: 16px; border: 1px solid rgba(229,9,20,0.1);">
-                <p style="color: var(--text-secondary);">No screenings scheduled for today.</p>
+            <div class="empty-state">
+                <p>No screenings scheduled for today.</p>
             </div>
         <?php else: ?>
             <div class="screenings-list">
@@ -660,18 +735,26 @@ $pending_verifications = $pending['pending'] ?? 0;
             </div>
         <?php endif; ?>
         
-        <h2 style="color: var(--red); margin: 40px 0 20px;">Recent Verifications</h2>
+        <h2 class="section-title">Recent Verifications</h2>
         <table class="verifications-table">
             <thead>
-                <tr><th>Time</th><th>Ticket Code</th><th>Movie</th><th>Customer</th><th>Status</th></tr>
+                <tr>
+                    <th>Time</th>
+                    <th>Ticket Code</th>
+                    <th>Movie</th>
+                    <th>Customer</th>
+                    <th>Status</th>
+                </tr>
             </thead>
             <tbody>
                 <?php foreach ($recent_verifications as $verification): ?>
-                    <tr><td><?php echo date('h:i A', strtotime($verification['used_at'])); ?></td>
-                    <td><code><?php echo htmlspecialchars($verification['ticket_code']); ?></code></td>
-                    <td><?php echo htmlspecialchars($verification['title']); ?></td>
-                    <td><?php echo htmlspecialchars($verification['first_name'] . ' ' . $verification['last_name']); ?></td>
-                    <td><span class="badge-success">Verified</span></td></tr>
+                    <tr>
+                        <td><?php echo date('h:i A', strtotime($verification['used_at'])); ?></td>
+                        <td><code><?php echo htmlspecialchars($verification['ticket_code']); ?></code></td>
+                        <td><?php echo htmlspecialchars($verification['title']); ?></td>
+                        <td><?php echo htmlspecialchars($verification['first_name'] . ' ' . $verification['last_name']); ?></td>
+                        <td><span class="badge-success">Verified</span></td>
+                    </tr>
                 <?php endforeach; ?>
                 <?php if (empty($recent_verifications)): ?>
                     <tr><td colspan="5" style="text-align: center; padding: 30px; color: var(--text-secondary);">No recent verifications</td></tr>
